@@ -1,65 +1,223 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "./lib/supabase";
+
+export default function HomePage() {
+  const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function checkSession() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (ignore) return;
+
+        if (session?.user) {
+          setHasSession(true);
+          router.replace("/dashboard");
+          return;
+        }
+
+        setHasSession(false);
+      } catch (error) {
+        console.error("Error verificando sesión:", error);
+        setHasSession(false);
+      } finally {
+        if (!ignore) {
+          setCheckingSession(false);
+        }
+      }
+    }
+
+    checkSession();
+
+    return () => {
+      ignore = true;
+    };
+  }, [router]);
+
+  if (checkingSession) {
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-3xl rounded-3xl bg-white p-10 text-center shadow-sm ring-1 ring-slate-200">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+              VitaSmart AI
+            </div>
+
+            <h1 className="mt-6 text-3xl font-bold text-slate-900 sm:text-4xl">
+              Verificando tu sesión...
+            </h1>
+
+            <p className="mt-4 text-slate-600">
+              Estamos comprobando si ya tienes una cuenta activa para llevarte a
+              tu dashboard personal.
+            </p>
+          </div>
+        </section>
       </main>
+    );
+  }
+
+  if (hasSession) {
+    return null;
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="mx-auto max-w-4xl text-center">
+          <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
+            Preventive Health Intelligence
+          </div>
+
+          <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
+            Tu plataforma inteligente de salud preventiva
+          </h1>
+
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+            Analiza tu perfil, obtén un Health Score, descubre prioridades de
+            bienestar y recibe recomendaciones personalizadas de suplementos y
+            hábitos con apoyo de inteligencia artificial.
+          </p>
+
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link
+              href="/quiz"
+              className="rounded-xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-slate-700"
+            >
+              Comenzar análisis
+            </Link>
+
+            <Link
+              href="/history"
+              className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Ver historial
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-20 grid gap-6 md:grid-cols-3">
+          <FeatureCard
+            title="Health Score"
+            description="Obtén una puntuación orientativa de bienestar basada en tu perfil actual, con factores clave que influyen en tu estado general."
+          />
+          <FeatureCard
+            title="Análisis inteligente"
+            description="La plataforma interpreta sueño, estrés, edad y objetivos para generar una lectura clara y accionable de tu situación."
+          />
+          <FeatureCard
+            title="Seguimiento continuo"
+            description="Guarda tus análisis en el tiempo y observa la evolución de tu score, tendencias y cambios en tu bienestar."
+          />
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Cómo funciona VitaSmart AI
+            </h2>
+            <p className="mt-4 text-slate-600">
+              Un flujo simple, rápido y pensado para generar valor real desde el
+              primer análisis.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-6 md:grid-cols-3">
+            <StepCard
+              step="01"
+              title="Responde el assessment"
+              description="Completa el cuestionario sobre edad, estrés, sueño y objetivo principal de salud."
+            />
+            <StepCard
+              step="02"
+              title="Recibe tu análisis"
+              description="La IA genera un score, interpreta tu perfil y resume tus prioridades de bienestar."
+            />
+            <StepCard
+              step="03"
+              title="Actúa y da seguimiento"
+              description="Consulta recomendaciones, guarda tus resultados y revisa tu evolución en el tiempo."
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="rounded-3xl bg-slate-900 px-8 py-12 text-white shadow-sm sm:px-12">
+          <div className="max-w-3xl">
+            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">
+              Próximo nivel
+            </div>
+
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+              Convierte tus análisis en un sistema de mejora continua
+            </h2>
+
+            <p className="mt-4 text-slate-300">
+              VitaSmart AI no es solo un test. Es la base de una plataforma de
+              salud preventiva con historial, tendencias, recomendaciones
+              inteligentes y evolución del usuario.
+            </p>
+
+            <div className="mt-8">
+              <Link
+                href="/quiz"
+                className="inline-flex rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-slate-100"
+              >
+                Hacer mi análisis ahora
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function FeatureCard({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
+      <p className="mt-3 leading-7 text-slate-600">{description}</p>
+    </div>
+  );
+}
+
+function StepCard({
+  step,
+  title,
+  description,
+}: {
+  step: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-6 ring-1 ring-slate-200">
+      <div className="text-sm font-semibold tracking-wide text-slate-500">
+        {step}
+      </div>
+      <h3 className="mt-3 text-xl font-semibold text-slate-900">{title}</h3>
+      <p className="mt-3 leading-7 text-slate-600">{description}</p>
     </div>
   );
 }
