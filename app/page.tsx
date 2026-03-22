@@ -7,30 +7,49 @@ import { supabase } from "./lib/supabase";
 
 export default function HomePage() {
   const router = useRouter();
+
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
+  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
     let ignore = false;
 
     async function checkSession() {
       try {
+        if (!ignore) {
+          setCheckingSession(true);
+          setAuthError("");
+        }
+
         const {
-          data: { session },
-        } = await supabase.auth.getSession();
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error) {
+          throw error;
+        }
 
         if (ignore) return;
 
-        if (session?.user) {
+        if (user) {
           setHasSession(true);
+          setCheckingSession(false);
           router.replace("/dashboard");
           return;
         }
 
         setHasSession(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error verificando sesión:", error);
-        setHasSession(false);
+
+        if (!ignore) {
+          setHasSession(false);
+          setAuthError(
+            error?.message || "No se pudo verificar la sesión actual."
+          );
+        }
       } finally {
         if (!ignore) {
           setCheckingSession(false);
@@ -40,8 +59,24 @@ export default function HomePage() {
 
     checkSession();
 
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (ignore) return;
+
+      if (session?.user) {
+        setHasSession(true);
+        setCheckingSession(false);
+        router.replace("/dashboard");
+      } else {
+        setHasSession(false);
+        setCheckingSession(false);
+      }
+    });
+
     return () => {
       ignore = true;
+      subscription.unsubscribe();
     };
   }, [router]);
 
@@ -69,7 +104,25 @@ export default function HomePage() {
   }
 
   if (hasSession) {
-    return null;
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mx-auto max-w-3xl rounded-3xl bg-white p-10 text-center shadow-sm ring-1 ring-slate-200">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+              VitaSmart AI
+            </div>
+
+            <h1 className="mt-6 text-3xl font-bold text-slate-900 sm:text-4xl">
+              Redirigiendo a tu dashboard...
+            </h1>
+
+            <p className="mt-4 text-slate-600">
+              Tu sesión está activa. Te estamos llevando a tu panel personal.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -105,6 +158,12 @@ export default function HomePage() {
               Ver historial
             </Link>
           </div>
+
+          {authError && (
+            <p className="mx-auto mt-6 max-w-2xl text-sm text-red-600">
+              {authError}
+            </p>
+          )}
         </div>
 
         <div className="mt-20 grid gap-6 md:grid-cols-3">

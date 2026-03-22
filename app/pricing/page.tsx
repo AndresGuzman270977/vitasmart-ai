@@ -22,6 +22,11 @@ type UserProfileRow = {
   updated_at?: string;
 };
 
+type BasicUser = {
+  id: string;
+  email?: string | null;
+};
+
 export default function PricingPage() {
   return (
     <Suspense
@@ -54,7 +59,8 @@ function PricingPageContent() {
   const searchParams = useSearchParams();
 
   const [currentPlan, setCurrentPlan] = useState<UserPlan | null>(null);
-  const [currentSubscriptionStatus, setCurrentSubscriptionStatus] = useState<string | null>(null);
+  const [currentSubscriptionStatus, setCurrentSubscriptionStatus] =
+    useState<string | null>(null);
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [changingPlan, setChangingPlan] = useState<UserPlan | null>(null);
@@ -62,50 +68,94 @@ function PricingPageContent() {
   const [message, setMessage] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  async function getAuthenticatedUser(): Promise<BasicUser | null> {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email ?? null,
+    };
+  }
+
+  async function ensureProfile(
+    userId: string,
+    email?: string | null
+  ): Promise<UserProfileRow> {
+    const { data: existingProfile, error: existingError } = await supabase
+      .from("user_profiles")
+      .select(
+        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
+      )
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existingProfile) {
+      return existingProfile as UserProfileRow;
+    }
+
+    const payload = {
+      id: userId,
+      email: email ?? null,
+      plan: "free" as UserPlan,
+    };
+
+    const { data: createdProfile, error: createError } = await supabase
+      .from("user_profiles")
+      .upsert([payload], { onConflict: "id" })
+      .select(
+        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
+      )
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
+
+    return createdProfile as UserProfileRow;
+  }
+
+  async function loadProfileState() {
+    const user = await getAuthenticatedUser();
+
+    if (!user) {
+      setCurrentUserId(null);
+      setCurrentPlan(null);
+      setCurrentSubscriptionStatus(null);
+      setHasStripeCustomer(false);
+      return;
+    }
+
+    const profile = await ensureProfile(user.id, user.email);
+
+    setCurrentUserId(user.id);
+    setCurrentPlan(normalizePlan(profile?.plan));
+    setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
+    setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
+  }
+
   useEffect(() => {
     let ignore = false;
 
-    async function ensureProfile(userId: string, email?: string | null) {
-      const { data: existingProfile, error: existingError } = await supabase
-        .from("user_profiles")
-        .select(
-          "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
-        )
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (existingError) {
-        throw existingError;
-      }
-
-      if (existingProfile) {
-        return existingProfile as UserProfileRow;
-      }
-
-      const payload = {
-        id: userId,
-        email: email ?? null,
-        plan: "free" as UserPlan,
-      };
-
-      const { data: createdProfile, error: createError } = await supabase
-        .from("user_profiles")
-        .upsert([payload], { onConflict: "id" })
-        .select(
-          "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
-        )
-        .single();
-
-      if (createError) {
-        throw createError;
-      }
-
-      return createdProfile as UserProfileRow;
-    }
-
     async function loadPlan() {
       try {
-        setLoading(true);
+        if (!ignore) {
+          setLoading(true);
+        }
 
         const checkoutStatus = searchParams.get("checkout");
         const checkoutPlan = searchParams.get("plan");
@@ -113,7 +163,9 @@ function PricingPageContent() {
         if (checkoutStatus === "success" && !ignore) {
           setMessage(
             `Stripe confirmó tu proceso de pago${
-              checkoutPlan ? ` para el plan ${String(checkoutPlan).toUpperCase()}` : ""
+              checkoutPlan
+                ? ` para el plan ${String(checkoutPlan).toUpperCase()}`
+                : ""
             }. Si el cambio no se refleja aún, actualiza en unos segundos.`
           );
         } else if (checkoutStatus === "cancelled" && !ignore) {
@@ -122,16 +174,7 @@ function PricingPageContent() {
           setMessage("");
         }
 
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          throw sessionError;
-        }
-
-        const user = session?.user;
+        const user = await getAuthenticatedUser();
 
         if (!user) {
           if (!ignore) {
@@ -184,52 +227,30 @@ function PricingPageContent() {
         setCurrentPlan(null);
         setCurrentSubscriptionStatus(null);
         setHasStripeCustomer(false);
+        setLoading(false);
         return;
       }
 
       try {
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select(
-            "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
-          )
-          .eq("id", user.id)
-          .maybeSingle();
+        const profile = await ensureProfile(user.id, user.email ?? null);
 
-        if (!profile) {
-          const { data: createdProfile } = await supabase
-            .from("user_profiles")
-            .upsert(
-              [
-                {
-                  id: user.id,
-                  email: user.email ?? null,
-                  plan: "free",
-                },
-              ],
-              { onConflict: "id" }
-            )
-            .select(
-              "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
-            )
-            .single();
-
-          setCurrentUserId(user.id);
-          setCurrentPlan(normalizePlan(createdProfile?.plan));
-          setCurrentSubscriptionStatus(createdProfile?.subscription_status ?? null);
-          setHasStripeCustomer(Boolean(createdProfile?.stripe_customer_id));
-          return;
-        }
+        if (ignore) return;
 
         setCurrentUserId(user.id);
         setCurrentPlan(normalizePlan(profile?.plan));
         setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
         setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
-      } catch {
+        setLoading(false);
+      } catch (error) {
+        console.error("Auth state pricing error:", error);
+
+        if (ignore) return;
+
         setCurrentUserId(user.id);
         setCurrentPlan("free");
         setCurrentSubscriptionStatus(null);
         setHasStripeCustomer(false);
+        setLoading(false);
       }
     });
 
@@ -241,34 +262,13 @@ function PricingPageContent() {
 
   async function refreshProfileState() {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      const user = session?.user;
-
-      if (!user) {
-        setCurrentUserId(null);
-        setCurrentPlan(null);
-        setCurrentSubscriptionStatus(null);
-        setHasStripeCustomer(false);
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select(
-          "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
-        )
-        .eq("id", user.id)
-        .maybeSingle();
-
-      setCurrentUserId(user.id);
-      setCurrentPlan(normalizePlan(profile?.plan));
-      setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
-      setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
-    } catch (error) {
+      setMessage("");
+      await loadProfileState();
+    } catch (error: any) {
       console.error("Error refrescando perfil:", error);
+      setMessage(
+        error?.message || "No se pudo refrescar el estado del perfil."
+      );
     }
   }
 
@@ -301,7 +301,9 @@ function PricingPageContent() {
       const accessToken = session?.access_token || "";
 
       if (!accessToken) {
-        throw new Error("No se encontró una sesión válida para iniciar el checkout.");
+        throw new Error(
+          "No se encontró una sesión válida para iniciar el checkout."
+        );
       }
 
       const response = await fetch("/api/stripe/checkout", {
@@ -356,7 +358,9 @@ function PricingPageContent() {
       const accessToken = session?.access_token || "";
 
       if (!accessToken) {
-        throw new Error("No se encontró una sesión válida para abrir el portal.");
+        throw new Error(
+          "No se encontró una sesión válida para abrir el portal."
+        );
       }
 
       const response = await fetch("/api/stripe/portal", {
@@ -398,13 +402,16 @@ function PricingPageContent() {
     if (currentSubscriptionStatus === "past_due") return "Pago pendiente";
     if (currentSubscriptionStatus === "payment_failed") return "Pago fallido";
     if (currentSubscriptionStatus === "canceled") return "Cancelada";
-    if (currentSubscriptionStatus === "checkout_completed") return "Procesando activación";
+    if (currentSubscriptionStatus === "checkout_completed")
+      return "Procesando activación";
     return currentSubscriptionStatus;
   }, [currentSubscriptionStatus]);
 
   const canOpenPortal =
     Boolean(currentUserId) &&
-    (currentPlan === "pro" || currentPlan === "premium" || hasStripeCustomer);
+    (currentPlan === "pro" ||
+      currentPlan === "premium" ||
+      hasStripeCustomer);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -433,7 +440,8 @@ function PricingPageContent() {
                   Plan actual: <strong>{getPlanLabel(currentPlan)}</strong>
                 </div>
                 <div className="text-sm text-slate-600">
-                  Estado de suscripción: <strong>{subscriptionStatusLabel}</strong>
+                  Estado de suscripción:{" "}
+                  <strong>{subscriptionStatusLabel}</strong>
                 </div>
               </div>
             ) : (
@@ -478,7 +486,11 @@ function PricingPageContent() {
             price="$0"
             subtitle="Ideal para descubrir la plataforma"
             features={[
-              `Hasta ${Number.isFinite(freeLimits.historyLimit) ? freeLimits.historyLimit : "∞"} análisis guardados`,
+              `Hasta ${
+                Number.isFinite(freeLimits.historyLimit)
+                  ? freeLimits.historyLimit
+                  : "∞"
+              } análisis guardados`,
               "Health Score básico",
               "Análisis base con resumen y factores",
               "Acceso al quiz",
@@ -501,7 +513,11 @@ function PricingPageContent() {
             period="/mes"
             subtitle="Para usuarios que quieren seguimiento real"
             features={[
-              `Hasta ${Number.isFinite(proLimits.historyLimit) ? proLimits.historyLimit : "∞"} análisis guardados`,
+              `Hasta ${
+                Number.isFinite(proLimits.historyLimit)
+                  ? proLimits.historyLimit
+                  : "∞"
+              } análisis guardados`,
               "IA avanzada desbloqueada",
               "Recomendaciones priorizadas",
               "Marketplace inteligente",
@@ -595,12 +611,42 @@ function PricingPageContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                <PricingRow label="Historial guardado" free="3" pro="50" premium="Ilimitado" />
-                <PricingRow label="Análisis base" free="Sí" pro="Sí" premium="Sí" />
-                <PricingRow label="IA avanzada" free="No" pro="Sí" premium="Sí" />
-                <PricingRow label="Marketplace inteligente" free="No" pro="Sí" premium="Sí" />
-                <PricingRow label="Bundles premium" free="No" pro="No" premium="Sí" />
-                <PricingRow label="Portal de facturación" free="No" pro="Sí" premium="Sí" />
+                <PricingRow
+                  label="Historial guardado"
+                  free="3"
+                  pro="50"
+                  premium="Ilimitado"
+                />
+                <PricingRow
+                  label="Análisis base"
+                  free="Sí"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <PricingRow
+                  label="IA avanzada"
+                  free="No"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <PricingRow
+                  label="Marketplace inteligente"
+                  free="No"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <PricingRow
+                  label="Bundles premium"
+                  free="No"
+                  pro="No"
+                  premium="Sí"
+                />
+                <PricingRow
+                  label="Portal de facturación"
+                  free="No"
+                  pro="Sí"
+                  premium="Sí"
+                />
               </tbody>
             </table>
           </div>
