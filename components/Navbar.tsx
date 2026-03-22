@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../app/lib/supabase";
 import { signOutUser } from "../app/lib/auth";
-import { ensureUserProfile, getCurrentUserProfile } from "../app/lib/profile";
-import { getPlanLabel, type UserPlan } from "../app/lib/planLimits";
+import { getCurrentUserProfile } from "../app/lib/profile";
+import { getPlanLabel, normalizePlan, type UserPlan } from "../app/lib/planLimits";
 
 type NavbarUser = {
   id: string;
@@ -23,41 +23,53 @@ export default function Navbar() {
   useEffect(() => {
     let mounted = true;
 
-    async function resolveUserPlan() {
+    async function resolvePlanSafe() {
       try {
-        await ensureUserProfile();
         const profile = await getCurrentUserProfile();
-        return profile?.plan ?? "free";
-      } catch {
+        return normalizePlan(profile?.plan);
+      } catch (error) {
+        console.error("Navbar: no se pudo cargar el plan del usuario:", error);
         return "free" as UserPlan;
       }
     }
 
     async function loadUser() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
 
-      if (!mounted) return;
-
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-        });
-
-        const plan = await resolveUserPlan();
-
-        if (mounted) {
-          setUserPlan(plan);
+        if (error) {
+          console.error("Navbar getSession error:", error);
         }
-      } else {
-        setUser(null);
-        setUserPlan(null);
-      }
 
-      if (mounted) {
-        setLoading(false);
+        if (!mounted) return;
+
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email,
+          });
+
+          setLoading(false);
+
+          const plan = await resolvePlanSafe();
+          if (mounted) {
+            setUserPlan(plan);
+          }
+        } else {
+          setUser(null);
+          setUserPlan(null);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Navbar loadUser error:", error);
+        if (mounted) {
+          setUser(null);
+          setUserPlan(null);
+          setLoading(false);
+        }
       }
     }
 
@@ -66,20 +78,32 @@ export default function Navbar() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-        });
+      if (!mounted) return;
 
-        const plan = await resolveUserPlan();
-        setUserPlan(plan);
-      } else {
-        setUser(null);
-        setUserPlan(null);
+      try {
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email,
+          });
+          setLoading(false);
+
+          const plan = await resolvePlanSafe();
+          if (mounted) {
+            setUserPlan(plan);
+          }
+        } else {
+          setUser(null);
+          setUserPlan(null);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Navbar auth state error:", error);
+        if (mounted) {
+          setUserPlan("free");
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     });
 
     return () => {
@@ -192,31 +216,11 @@ export default function Navbar() {
                   </div>
 
                   <div className="py-2">
-                    <MenuLink
-                      href="/dashboard"
-                      label="Ir al dashboard"
-                      onClick={() => setMenuOpen(false)}
-                    />
-                    <MenuLink
-                      href="/history"
-                      label="Ver historial"
-                      onClick={() => setMenuOpen(false)}
-                    />
-                    <MenuLink
-                      href="/quiz"
-                      label="Nuevo análisis"
-                      onClick={() => setMenuOpen(false)}
-                    />
-                    <MenuLink
-                      href="/marketplace"
-                      label="Marketplace"
-                      onClick={() => setMenuOpen(false)}
-                    />
-                    <MenuLink
-                      href="/pricing"
-                      label="Gestionar plan"
-                      onClick={() => setMenuOpen(false)}
-                    />
+                    <MenuLink href="/dashboard" label="Ir al dashboard" onClick={() => setMenuOpen(false)} />
+                    <MenuLink href="/history" label="Ver historial" onClick={() => setMenuOpen(false)} />
+                    <MenuLink href="/quiz" label="Nuevo análisis" onClick={() => setMenuOpen(false)} />
+                    <MenuLink href="/marketplace" label="Marketplace" onClick={() => setMenuOpen(false)} />
+                    <MenuLink href="/pricing" label="Gestionar plan" onClick={() => setMenuOpen(false)} />
                   </div>
 
                   <div className="border-t border-slate-100 px-2 pt-2">

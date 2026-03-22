@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
-import { getPlanLabel, getPlanLimits, type UserPlan } from "../lib/planLimits";
+import { getCurrentUserProfile } from "../lib/profile";
+import { getPlanLabel, getPlanLimits, normalizePlan, type UserPlan } from "../lib/planLimits";
 import HealthChart from "../../components/HealthChart";
 
 type HealthAssessment = {
@@ -65,6 +65,7 @@ export default function DashboardPage() {
             setItems([]);
             setUser(null);
             setUserPlan(null);
+            setLoading(false);
           }
           return;
         }
@@ -77,13 +78,12 @@ export default function DashboardPage() {
         }
 
         try {
-          await ensureUserProfile();
           const profile = await getCurrentUserProfile();
-
           if (!ignore) {
-            setUserPlan(profile?.plan ?? "free");
+            setUserPlan(normalizePlan(profile?.plan));
           }
-        } catch {
+        } catch (profileError) {
+          console.error("Dashboard profile error:", profileError);
           if (!ignore) {
             setUserPlan("free");
           }
@@ -104,6 +104,7 @@ export default function DashboardPage() {
           setItems((data || []) as HealthAssessment[]);
         }
       } catch (err: any) {
+        console.error("Dashboard error:", err);
         if (!ignore) {
           setError(err?.message || "No se pudo cargar el dashboard.");
         }
