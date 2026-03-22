@@ -15,6 +15,20 @@ export type UserProfile = {
 
 const DEFAULT_PLAN: PlanType = "free";
 
+function makeFallbackProfile(user: {
+  id: string;
+  email?: string | null;
+}): UserProfile {
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    plan: DEFAULT_PLAN,
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    subscription_status: null,
+  };
+}
+
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const { data, error } = await supabase
     .from("user_profiles")
@@ -69,11 +83,15 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
       onConflict: "id",
     })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error ensuring user profile:", error.message);
-    throw error;
+    return makeFallbackProfile(user);
+  }
+
+  if (!data) {
+    return makeFallbackProfile(user);
   }
 
   return data as UserProfile;
