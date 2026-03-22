@@ -55,7 +55,6 @@ export default function DashboardPage() {
           setNeedsLogin(false);
         }
 
-        // ✅ Fuente de verdad más confiable que getSession()
         const {
           data: { user: currentUser },
           error: userError,
@@ -84,7 +83,6 @@ export default function DashboardPage() {
           });
         }
 
-        // ✅ Perfil no debe bloquear dashboard
         try {
           const profile = await getCurrentUserProfile();
 
@@ -128,13 +126,16 @@ export default function DashboardPage() {
 
     loadDashboard();
 
-    // ✅ Reacciona si cambia el estado de autenticación
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log("DASHBOARD AUTH CHANGE:", _event, session?.user?.id ?? null);
 
-      if (!ignore) {
+      if (ignore) return;
+
+      setTimeout(() => {
+        if (ignore) return;
+
         if (!session?.user) {
           setNeedsLogin(true);
           setUser(null);
@@ -145,7 +146,7 @@ export default function DashboardPage() {
         }
 
         loadDashboard();
-      }
+      }, 0);
     });
 
     return () => {

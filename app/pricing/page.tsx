@@ -74,13 +74,8 @@ function PricingPageContent() {
       error,
     } = await supabase.auth.getUser();
 
-    if (error) {
-      throw error;
-    }
-
-    if (!user) {
-      return null;
-    }
+    if (error) throw error;
+    if (!user) return null;
 
     return {
       id: user.id,
@@ -100,13 +95,8 @@ function PricingPageContent() {
       .eq("id", userId)
       .maybeSingle();
 
-    if (existingError) {
-      throw existingError;
-    }
-
-    if (existingProfile) {
-      return existingProfile as UserProfileRow;
-    }
+    if (existingError) throw existingError;
+    if (existingProfile) return existingProfile as UserProfileRow;
 
     const payload = {
       id: userId,
@@ -122,10 +112,7 @@ function PricingPageContent() {
       )
       .single();
 
-    if (createError) {
-      throw createError;
-    }
-
+    if (createError) throw createError;
     return createdProfile as UserProfileRow;
   }
 
@@ -153,9 +140,7 @@ function PricingPageContent() {
 
     async function loadPlan() {
       try {
-        if (!ignore) {
-          setLoading(true);
-        }
+        if (!ignore) setLoading(true);
 
         const checkoutStatus = searchParams.get("checkout");
         const checkoutPlan = searchParams.get("plan");
@@ -207,9 +192,7 @@ function PricingPageContent() {
           );
         }
       } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
+        if (!ignore) setLoading(false);
       }
     }
 
@@ -217,41 +200,45 @@ function PricingPageContent() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (ignore) return;
 
-      const user = session?.user;
-
-      if (!user) {
-        setCurrentUserId(null);
-        setCurrentPlan(null);
-        setCurrentSubscriptionStatus(null);
-        setHasStripeCustomer(false);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const profile = await ensureProfile(user.id, user.email ?? null);
-
+      setTimeout(async () => {
         if (ignore) return;
 
-        setCurrentUserId(user.id);
-        setCurrentPlan(normalizePlan(profile?.plan));
-        setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
-        setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
-        setLoading(false);
-      } catch (error) {
-        console.error("Auth state pricing error:", error);
+        const user = session?.user;
 
-        if (ignore) return;
+        if (!user) {
+          setCurrentUserId(null);
+          setCurrentPlan(null);
+          setCurrentSubscriptionStatus(null);
+          setHasStripeCustomer(false);
+          setLoading(false);
+          return;
+        }
 
-        setCurrentUserId(user.id);
-        setCurrentPlan("free");
-        setCurrentSubscriptionStatus(null);
-        setHasStripeCustomer(false);
-        setLoading(false);
-      }
+        try {
+          const profile = await ensureProfile(user.id, user.email ?? null);
+
+          if (ignore) return;
+
+          setCurrentUserId(user.id);
+          setCurrentPlan(normalizePlan(profile?.plan));
+          setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
+          setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
+          setLoading(false);
+        } catch (error) {
+          console.error("Auth state pricing error:", error);
+
+          if (ignore) return;
+
+          setCurrentUserId(user.id);
+          setCurrentPlan("free");
+          setCurrentSubscriptionStatus(null);
+          setHasStripeCustomer(false);
+          setLoading(false);
+        }
+      }, 0);
     });
 
     return () => {
@@ -294,9 +281,7 @@ function PricingPageContent() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        throw sessionError;
-      }
+      if (sessionError) throw sessionError;
 
       const accessToken = session?.access_token || "";
 
@@ -351,9 +336,7 @@ function PricingPageContent() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        throw sessionError;
-      }
+      if (sessionError) throw sessionError;
 
       const accessToken = session?.access_token || "";
 

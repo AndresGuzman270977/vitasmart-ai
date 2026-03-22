@@ -64,14 +64,18 @@ export default function HomePage() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (ignore) return;
 
-      if (session?.user) {
-        setHasSession(true);
-        setCheckingSession(false);
-        router.replace("/dashboard");
-      } else {
-        setHasSession(false);
-        setCheckingSession(false);
-      }
+      setTimeout(() => {
+        if (ignore) return;
+
+        if (session?.user) {
+          setHasSession(true);
+          setCheckingSession(false);
+          router.replace("/dashboard");
+        } else {
+          setHasSession(false);
+          setCheckingSession(false);
+        }
+      }, 0);
     });
 
     return () => {
