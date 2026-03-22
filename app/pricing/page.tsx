@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import {
@@ -23,6 +23,34 @@ type UserProfileRow = {
 };
 
 export default function PricingPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-50 px-6 py-16">
+          <div className="mx-auto max-w-6xl">
+            <section className="mx-auto max-w-3xl text-center">
+              <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
+                VitaSmart AI · Pricing
+              </div>
+
+              <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+                Planes para escalar tu salud preventiva con IA
+              </h1>
+
+              <p className="mt-5 text-lg leading-8 text-slate-600">
+                Cargando información de planes...
+              </p>
+            </section>
+          </div>
+        </main>
+      }
+    >
+      <PricingPageContent />
+    </Suspense>
+  );
+}
+
+function PricingPageContent() {
   const searchParams = useSearchParams();
 
   const [currentPlan, setCurrentPlan] = useState<UserPlan | null>(null);
@@ -375,7 +403,8 @@ export default function PricingPage() {
   }, [currentSubscriptionStatus]);
 
   const canOpenPortal =
-    Boolean(currentUserId) && (currentPlan === "pro" || currentPlan === "premium" || hasStripeCustomer);
+    Boolean(currentUserId) &&
+    (currentPlan === "pro" || currentPlan === "premium" || hasStripeCustomer);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -566,42 +595,12 @@ export default function PricingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                <PricingRow
-                  label="Historial guardado"
-                  free="3"
-                  pro="50"
-                  premium="Ilimitado"
-                />
-                <PricingRow
-                  label="Análisis base"
-                  free="Sí"
-                  pro="Sí"
-                  premium="Sí"
-                />
-                <PricingRow
-                  label="IA avanzada"
-                  free="No"
-                  pro="Sí"
-                  premium="Sí"
-                />
-                <PricingRow
-                  label="Marketplace inteligente"
-                  free="No"
-                  pro="Sí"
-                  premium="Sí"
-                />
-                <PricingRow
-                  label="Bundles premium"
-                  free="No"
-                  pro="No"
-                  premium="Sí"
-                />
-                <PricingRow
-                  label="Portal de facturación"
-                  free="No"
-                  pro="Sí"
-                  premium="Sí"
-                />
+                <PricingRow label="Historial guardado" free="3" pro="50" premium="Ilimitado" />
+                <PricingRow label="Análisis base" free="Sí" pro="Sí" premium="Sí" />
+                <PricingRow label="IA avanzada" free="No" pro="Sí" premium="Sí" />
+                <PricingRow label="Marketplace inteligente" free="No" pro="Sí" premium="Sí" />
+                <PricingRow label="Bundles premium" free="No" pro="No" premium="Sí" />
+                <PricingRow label="Portal de facturación" free="No" pro="Sí" premium="Sí" />
               </tbody>
             </table>
           </div>
