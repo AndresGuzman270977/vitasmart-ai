@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getRecommendations } from "../lib/recommendations";
 import { saveAssessment, type AssessmentAiMode } from "../lib/saveAssessment";
@@ -37,6 +37,30 @@ type BackendAnalysisResponse = {
 };
 
 export default function ResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-50 px-6 py-16">
+          <div className="mx-auto max-w-5xl">
+            <div className="rounded-2xl bg-white p-8 shadow-sm">
+              <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
+                VitaSmart AI · Resultados
+              </div>
+              <h1 className="mb-4 text-3xl font-bold">
+                Tus recomendaciones personalizadas
+              </h1>
+              <p className="text-slate-600">Cargando resultados...</p>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <ResultsPageContent />
+    </Suspense>
+  );
+}
+
+function ResultsPageContent() {
   const searchParams = useSearchParams();
 
   const formData = {
@@ -267,12 +291,6 @@ export default function ResultsPage() {
             <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
               {upgradeMessage ||
                 "Tu plan actual incluye análisis base. Actualiza a Pro o Premium para desbloquear recomendaciones avanzadas."}
-            </div>
-          )}
-
-          {!upgradeRequired && wasDowngraded && !planLoading && (
-            <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-              Se aplicó una versión básica del análisis para tu plan actual.
             </div>
           )}
 
