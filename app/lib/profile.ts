@@ -1,6 +1,5 @@
 import { supabase } from "./supabase";
-import { getCurrentUser } from "./auth";
-import type { PlanType } from "./planLimits";
+import { normalizePlan, type PlanType } from "./planLimits";
 
 export type UserProfile = {
   id: string;
@@ -15,10 +14,12 @@ export type UserProfile = {
 
 const DEFAULT_PLAN: PlanType = "free";
 
-function makeFallbackProfile(user: {
+type BasicUser = {
   id: string;
   email?: string | null;
-}): UserProfile {
+};
+
+function makeFallbackProfile(user: BasicUser): UserProfile {
   return {
     id: user.id,
     email: user.email ?? null,
@@ -29,37 +30,81 @@ function makeFallbackProfile(user: {
   };
 }
 
+async function getAuthenticatedUser(): Promise<BasicUser | null> {
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error("Error getting authenticated user:", error.message);
+      return null;
+    }
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email ?? null,
+    };
+  } catch (error: any) {
+    console.error("Unexpected error getting authenticated user:", error?.message || error);
+    return null;
+  }
+}
+
+function normalizeProfile(data: any): UserProfile {
+  return {
+    id: data.id,
+    email: data.email ?? null,
+    plan: normalizePlan(data.plan),
+    stripe_customer_id: data.stripe_customer_id ?? null,
+    stripe_subscription_id: data.stripe_subscription_id ?? null,
+    subscription_status: data.subscription_status ?? null,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+  };
+}
+
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", userId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
 
-  if (error) {
-    console.error("Error loading user profile:", error.message);
+    if (error) {
+      console.error("Error loading user profile:", error.message);
+      return null;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return normalizeProfile(data);
+  } catch (error: any) {
+    console.error("Unexpected error loading user profile:", error?.message || error);
     return null;
   }
-
-  if (!data) {
-    return null;
-  }
-
-  return data as UserProfile;
 }
 
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
-  const user = await getCurrentUser();
+  const user = await getAuthenticatedUser();
 
   if (!user) {
     return null;
   }
 
-  return getUserProfile(user.id);
+  return await getUserProfile(user.id);
 }
 
 export async function ensureUserProfile(): Promise<UserProfile | null> {
-  const user = await getCurrentUser();
+  const user = await getAuthenticatedUser();
 
   if (!user) {
     return null;
@@ -77,24 +122,29 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
     plan: DEFAULT_PLAN,
   };
 
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .upsert([payload], {
-      onConflict: "id",
-    })
-    .select()
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .upsert([payload], {
+        onConflict: "id",
+      })
+      .select()
+      .maybeSingle();
 
-  if (error) {
-    console.error("Error ensuring user profile:", error.message);
+    if (error) {
+      console.error("Error ensuring user profile:", error.message);
+      return makeFallbackProfile(user);
+    }
+
+    if (!data) {
+      return makeFallbackProfile(user);
+    }
+
+    return normalizeProfile(data);
+  } catch (error: any) {
+    console.error("Unexpected error ensuring user profile:", error?.message || error);
     return makeFallbackProfile(user);
   }
-
-  if (!data) {
-    return makeFallbackProfile(user);
-  }
-
-  return data as UserProfile;
 }
 
 export async function updateUserPlan(
@@ -104,7 +154,7 @@ export async function updateUserPlan(
   const { data, error } = await supabase
     .from("user_profiles")
     .update({
-      plan,
+      plan: normalizePlan(plan),
     })
     .eq("id", userId)
     .select()
@@ -114,7 +164,7 @@ export async function updateUserPlan(
     throw error;
   }
 
-  return data as UserProfile;
+  return normalizeProfile(data);
 }
 
 export async function getCurrentStripeCustomerId(): Promise<string | null> {

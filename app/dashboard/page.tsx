@@ -49,20 +49,23 @@ export default function DashboardPage() {
 
     async function loadDashboard() {
       try {
-        setLoading(true);
-        setError("");
-        setNeedsLogin(false);
-
-        const { data, error: sessionError } = await supabase.auth.getSession();
-        const session = data?.session ?? null;
-
-        console.log("DASHBOARD SESSION DEBUG:", session);
-
-        if (sessionError) {
-          throw sessionError;
+        if (!ignore) {
+          setLoading(true);
+          setError("");
+          setNeedsLogin(false);
         }
 
-        const currentUser = session?.user;
+        // ✅ Fuente de verdad más confiable que getSession()
+        const {
+          data: { user: currentUser },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        console.log("DASHBOARD USER DEBUG:", currentUser);
+
+        if (userError) {
+          throw userError;
+        }
 
         if (!currentUser) {
           if (!ignore) {
@@ -70,7 +73,6 @@ export default function DashboardPage() {
             setItems([]);
             setUser(null);
             setUserPlan(null);
-            setLoading(false);
           }
           return;
         }
@@ -82,6 +84,7 @@ export default function DashboardPage() {
           });
         }
 
+        // ✅ Perfil no debe bloquear dashboard
         try {
           const profile = await getCurrentUserProfile();
 
@@ -125,8 +128,29 @@ export default function DashboardPage() {
 
     loadDashboard();
 
+    // ✅ Reacciona si cambia el estado de autenticación
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("DASHBOARD AUTH CHANGE:", _event, session?.user?.id ?? null);
+
+      if (!ignore) {
+        if (!session?.user) {
+          setNeedsLogin(true);
+          setUser(null);
+          setUserPlan(null);
+          setItems([]);
+          setLoading(false);
+          return;
+        }
+
+        loadDashboard();
+      }
+    });
+
     return () => {
       ignore = true;
+      subscription.unsubscribe();
     };
   }, []);
 
