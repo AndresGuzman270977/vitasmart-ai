@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../app/lib/supabase";
 import { signOutUser } from "../app/lib/auth";
 import { getCurrentUserProfile } from "../app/lib/profile";
-import { getPlanLabel, normalizePlan, type UserPlan } from "../app/lib/planLimits";
+import {
+  getPlanLabel,
+  normalizePlan,
+  type UserPlan,
+} from "../app/lib/planLimits";
 
 type NavbarUser = {
   id: string;
@@ -35,10 +39,10 @@ export default function Navbar() {
 
     async function loadUser() {
       try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
+        const session = data?.session ?? null;
+
+        console.log("NAVBAR SESSION DEBUG:", session);
 
         if (error) {
           console.error("Navbar getSession error:", error);
@@ -55,6 +59,7 @@ export default function Navbar() {
           setLoading(false);
 
           const plan = await resolvePlanSafe();
+
           if (mounted) {
             setUserPlan(plan);
           }
@@ -65,6 +70,7 @@ export default function Navbar() {
         }
       } catch (error) {
         console.error("Navbar loadUser error:", error);
+
         if (mounted) {
           setUser(null);
           setUserPlan(null);
@@ -89,6 +95,7 @@ export default function Navbar() {
           setLoading(false);
 
           const plan = await resolvePlanSafe();
+
           if (mounted) {
             setUserPlan(plan);
           }
@@ -99,6 +106,7 @@ export default function Navbar() {
         }
       } catch (error) {
         console.error("Navbar auth state error:", error);
+
         if (mounted) {
           setUserPlan("free");
           setLoading(false);
@@ -155,7 +163,10 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between">
-        <Link href="/" className="text-lg font-bold tracking-tight text-slate-900">
+        <Link
+          href="/"
+          className="text-lg font-bold tracking-tight text-slate-900"
+        >
           VitaSmart AI
         </Link>
 
@@ -208,6 +219,7 @@ export default function Navbar() {
                     <div className="mt-1 truncate text-xs text-slate-500">
                       {user.email}
                     </div>
+
                     {userPlan && (
                       <div className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase text-slate-700">
                         Plan {getPlanLabel(userPlan)}
@@ -216,11 +228,31 @@ export default function Navbar() {
                   </div>
 
                   <div className="py-2">
-                    <MenuLink href="/dashboard" label="Ir al dashboard" onClick={() => setMenuOpen(false)} />
-                    <MenuLink href="/history" label="Ver historial" onClick={() => setMenuOpen(false)} />
-                    <MenuLink href="/quiz" label="Nuevo análisis" onClick={() => setMenuOpen(false)} />
-                    <MenuLink href="/marketplace" label="Marketplace" onClick={() => setMenuOpen(false)} />
-                    <MenuLink href="/pricing" label="Gestionar plan" onClick={() => setMenuOpen(false)} />
+                    <MenuLink
+                      href="/dashboard"
+                      label="Ir al dashboard"
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    <MenuLink
+                      href="/history"
+                      label="Ver historial"
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    <MenuLink
+                      href="/quiz"
+                      label="Nuevo análisis"
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    <MenuLink
+                      href="/marketplace"
+                      label="Marketplace"
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    <MenuLink
+                      href="/pricing"
+                      label="Gestionar plan"
+                      onClick={() => setMenuOpen(false)}
+                    />
                   </div>
 
                   <div className="border-t border-slate-100 px-2 pt-2">

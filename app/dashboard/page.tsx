@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { getCurrentUserProfile } from "../lib/profile";
-import { getPlanLabel, getPlanLimits, normalizePlan, type UserPlan } from "../lib/planLimits";
+import {
+  getPlanLabel,
+  getPlanLimits,
+  normalizePlan,
+  type UserPlan,
+} from "../lib/planLimits";
 import HealthChart from "../../components/HealthChart";
 
 type HealthAssessment = {
@@ -48,10 +53,10 @@ export default function DashboardPage() {
         setError("");
         setNeedsLogin(false);
 
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        const session = data?.session ?? null;
+
+        console.log("DASHBOARD SESSION DEBUG:", session);
 
         if (sessionError) {
           throw sessionError;
@@ -79,32 +84,35 @@ export default function DashboardPage() {
 
         try {
           const profile = await getCurrentUserProfile();
+
           if (!ignore) {
             setUserPlan(normalizePlan(profile?.plan));
           }
         } catch (profileError) {
           console.error("Dashboard profile error:", profileError);
+
           if (!ignore) {
             setUserPlan("free");
           }
         }
 
-        const { data, error } = await supabase
+        const { data: assessments, error: assessmentsError } = await supabase
           .from("health_assessments")
           .select("*")
           .eq("user_id", currentUser.id)
           .order("created_at", { ascending: false })
           .limit(50);
 
-        if (error) {
-          throw error;
+        if (assessmentsError) {
+          throw assessmentsError;
         }
 
         if (!ignore) {
-          setItems((data || []) as HealthAssessment[]);
+          setItems((assessments || []) as HealthAssessment[]);
         }
       } catch (err: any) {
         console.error("Dashboard error:", err);
+
         if (!ignore) {
           setError(err?.message || "No se pudo cargar el dashboard.");
         }
@@ -178,6 +186,22 @@ export default function DashboardPage() {
           <div className="rounded-2xl bg-white p-8 shadow-sm">
             <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
             <p className="mt-4 text-red-600">{error}</p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/login"
+                className="rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white hover:bg-slate-700"
+              >
+                Ir a login
+              </Link>
+
+              <Link
+                href="/"
+                className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Volver al inicio
+              </Link>
+            </div>
           </div>
         ) : needsLogin ? (
           <div className="rounded-2xl bg-white p-8 shadow-sm">
