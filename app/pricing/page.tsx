@@ -57,6 +57,8 @@ export default function PricingPage() {
 
 function PricingPageContent() {
   const searchParams = useSearchParams();
+  const checkoutStatus = searchParams.get("checkout");
+  const checkoutPlan = searchParams.get("plan");
 
   const [currentPlan, setCurrentPlan] = useState<UserPlan | null>(null);
   const [currentSubscriptionStatus, setCurrentSubscriptionStatus] =
@@ -74,8 +76,13 @@ function PricingPageContent() {
       error,
     } = await supabase.auth.getUser();
 
-    if (error) throw error;
-    if (!user) return null;
+    if (error) {
+      throw error;
+    }
+
+    if (!user) {
+      return null;
+    }
 
     return {
       id: user.id,
@@ -95,8 +102,13 @@ function PricingPageContent() {
       .eq("id", userId)
       .maybeSingle();
 
-    if (existingError) throw existingError;
-    if (existingProfile) return existingProfile as UserProfileRow;
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existingProfile) {
+      return existingProfile as UserProfileRow;
+    }
 
     const payload = {
       id: userId,
@@ -112,7 +124,10 @@ function PricingPageContent() {
       )
       .single();
 
-    if (createError) throw createError;
+    if (createError) {
+      throw createError;
+    }
+
     return createdProfile as UserProfileRow;
   }
 
@@ -140,10 +155,9 @@ function PricingPageContent() {
 
     async function loadPlan() {
       try {
-        if (!ignore) setLoading(true);
-
-        const checkoutStatus = searchParams.get("checkout");
-        const checkoutPlan = searchParams.get("plan");
+        if (!ignore) {
+          setLoading(true);
+        }
 
         if (checkoutStatus === "success" && !ignore) {
           setMessage(
@@ -192,70 +206,31 @@ function PricingPageContent() {
           );
         }
       } finally {
-        if (!ignore) setLoading(false);
+        if (!ignore) {
+          setLoading(false);
+        }
       }
     }
 
     loadPlan();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (ignore) return;
-
-      setTimeout(async () => {
-        if (ignore) return;
-
-        const user = session?.user;
-
-        if (!user) {
-          setCurrentUserId(null);
-          setCurrentPlan(null);
-          setCurrentSubscriptionStatus(null);
-          setHasStripeCustomer(false);
-          setLoading(false);
-          return;
-        }
-
-        try {
-          const profile = await ensureProfile(user.id, user.email ?? null);
-
-          if (ignore) return;
-
-          setCurrentUserId(user.id);
-          setCurrentPlan(normalizePlan(profile?.plan));
-          setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
-          setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
-          setLoading(false);
-        } catch (error) {
-          console.error("Auth state pricing error:", error);
-
-          if (ignore) return;
-
-          setCurrentUserId(user.id);
-          setCurrentPlan("free");
-          setCurrentSubscriptionStatus(null);
-          setHasStripeCustomer(false);
-          setLoading(false);
-        }
-      }, 0);
-    });
-
     return () => {
       ignore = true;
-      subscription.unsubscribe();
     };
-  }, [searchParams]);
+  }, [checkoutStatus, checkoutPlan]);
 
   async function refreshProfileState() {
     try {
       setMessage("");
+      setLoading(true);
       await loadProfileState();
     } catch (error: any) {
       console.error("Error refrescando perfil:", error);
       setMessage(
         error?.message || "No se pudo refrescar el estado del perfil."
       );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -281,7 +256,9 @@ function PricingPageContent() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) throw sessionError;
+      if (sessionError) {
+        throw sessionError;
+      }
 
       const accessToken = session?.access_token || "";
 
@@ -336,7 +313,9 @@ function PricingPageContent() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) throw sessionError;
+      if (sessionError) {
+        throw sessionError;
+      }
 
       const accessToken = session?.access_token || "";
 
