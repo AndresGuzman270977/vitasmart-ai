@@ -27,6 +27,11 @@ type BasicUser = {
   email?: string | null;
 };
 
+type SubscriptionAction =
+  | "switch_plan"
+  | "cancel_at_period_end"
+  | "resume";
+
 export default function PricingPage() {
   return (
     <Suspense
@@ -64,9 +69,14 @@ function PricingPageContent() {
   const [currentSubscriptionStatus, setCurrentSubscriptionStatus] =
     useState<string | null>(null);
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
+  const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [changingPlan, setChangingPlan] = useState<UserPlan | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [subscriptionActionLoading, setSubscriptionActionLoading] =
+    useState<SubscriptionAction | null>(null);
+
   const [message, setMessage] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -139,6 +149,7 @@ function PricingPageContent() {
       setCurrentPlan(null);
       setCurrentSubscriptionStatus(null);
       setHasStripeCustomer(false);
+      setHasStripeSubscription(false);
       return;
     }
 
@@ -148,6 +159,7 @@ function PricingPageContent() {
     setCurrentPlan(normalizePlan(profile?.plan));
     setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
     setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
+    setHasStripeSubscription(Boolean(profile?.stripe_subscription_id));
   }
 
   useEffect(() => {
@@ -181,6 +193,7 @@ function PricingPageContent() {
             setCurrentPlan(null);
             setCurrentSubscriptionStatus(null);
             setHasStripeCustomer(false);
+            setHasStripeSubscription(false);
           }
           return;
         }
@@ -192,6 +205,7 @@ function PricingPageContent() {
           setCurrentPlan(normalizePlan(profile?.plan));
           setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
           setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
+          setHasStripeSubscription(Boolean(profile?.stripe_subscription_id));
         }
       } catch (error: any) {
         console.error("Error cargando pricing:", error);
@@ -201,6 +215,7 @@ function PricingPageContent() {
           setCurrentPlan(null);
           setCurrentSubscriptionStatus(null);
           setHasStripeCustomer(false);
+          setHasStripeSubscription(false);
           setMessage(
             error?.message || "No se pudo cargar la información del plan."
           );
@@ -353,6 +368,69 @@ function PricingPageContent() {
     }
   }
 
+  async function handleSubscriptionAction(
+    action: SubscriptionAction,
+    plan?: UserPlan
+  ) {
+    try {
+      if (!currentUserId) {
+        setMessage("Inicia sesión para gestionar tu suscripción.");
+        return;
+      }
+
+      setSubscriptionActionLoading(action);
+      setMessage("");
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      const accessToken = session?.access_token || "";
+
+      if (!accessToken) {
+        throw new Error(
+          "No se encontró una sesión válida para gestionar la suscripción."
+        );
+      }
+
+      const response = await fetch("/api/stripe/subscription", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action,
+          plan,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo gestionar la suscripción.");
+      }
+
+      setMessage(
+        data.message || "La suscripción fue actualizada correctamente."
+      );
+
+      await loadProfileState();
+    } catch (error: any) {
+      console.error("Error gestionando suscripción:", error);
+      setMessage(
+        error?.message || "No se pudo gestionar la suscripción."
+      );
+    } finally {
+      setSubscriptionActionLoading(null);
+    }
+  }
+
   const freeLimits = useMemo(() => getPlanLimits("free"), []);
   const proLimits = useMemo(() => getPlanLimits("pro"), []);
   const premiumLimits = useMemo(() => getPlanLimits("premium"), []);
@@ -375,6 +453,33 @@ function PricingPageContent() {
     (currentPlan === "pro" ||
       currentPlan === "premium" ||
       hasStripeCustomer);
+
+  const hasPaidPlan =
+    currentPlan === "pro" || currentPlan === "premium";
+
+  const canSwitchToPro =
+    hasPaidPlan &&
+    hasStripeSubscription &&
+    currentPlan === "premium" &&
+    subscriptionActionLoading === null;
+
+  const canSwitchToPremium =
+    hasPaidPlan &&
+    hasStripeSubscription &&
+    currentPlan === "pro" &&
+    subscriptionActionLoading === null;
+
+  const canCancelAtPeriodEnd =
+    hasPaidPlan &&
+    hasStripeSubscription &&
+    currentSubscriptionStatus !== "canceled" &&
+    subscriptionActionLoading === null;
+
+  const canResume =
+    hasPaidPlan &&
+    hasStripeSubscription &&
+    currentSubscriptionStatus === "canceled" &&
+    subscriptionActionLoading === null;
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -421,7 +526,7 @@ function PricingPageContent() {
           )}
 
           {canOpenPortal && (
-            <div className="mt-4 flex items-center justify-center gap-3">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={handleOpenPortal}
@@ -438,6 +543,64 @@ function PricingPageContent() {
               >
                 Refrescar estado
               </button>
+
+              {canSwitchToPro && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSubscriptionAction("switch_plan", "pro")
+                  }
+                  disabled={subscriptionActionLoading !== null}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {subscriptionActionLoading === "switch_plan"
+                    ? "Actualizando..."
+                    : "Cambiar a Pro"}
+                </button>
+              )}
+
+              {canSwitchToPremium && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSubscriptionAction("switch_plan", "premium")
+                  }
+                  disabled={subscriptionActionLoading !== null}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {subscriptionActionLoading === "switch_plan"
+                    ? "Actualizando..."
+                    : "Cambiar a Premium"}
+                </button>
+              )}
+
+              {canCancelAtPeriodEnd && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSubscriptionAction("cancel_at_period_end")
+                  }
+                  disabled={subscriptionActionLoading !== null}
+                  className="rounded-xl border border-red-200 bg-white px-5 py-3 font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                >
+                  {subscriptionActionLoading === "cancel_at_period_end"
+                    ? "Procesando..."
+                    : "Cancelar al final del período"}
+                </button>
+              )}
+
+              {canResume && (
+                <button
+                  type="button"
+                  onClick={() => handleSubscriptionAction("resume")}
+                  disabled={subscriptionActionLoading !== null}
+                  className="rounded-xl border border-emerald-200 bg-white px-5 py-3 font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  {subscriptionActionLoading === "resume"
+                    ? "Procesando..."
+                    : "Reactivar suscripción"}
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -492,10 +655,16 @@ function PricingPageContent() {
                 ? "Redirigiendo..."
                 : currentPlan === "pro"
                 ? "Plan actual"
+                : hasPaidPlan
+                ? "Cambiar desde controles superiores"
                 : "Suscribirme a Pro"
             }
             onSelect={() => handleCheckout("pro")}
-            disabled={changingPlan !== null || currentPlan === "pro"}
+            disabled={
+              changingPlan !== null ||
+              currentPlan === "pro" ||
+              hasPaidPlan
+            }
             highlighted={true}
             current={currentPlan === "pro"}
           />
@@ -519,10 +688,16 @@ function PricingPageContent() {
                 ? "Redirigiendo..."
                 : currentPlan === "premium"
                 ? "Plan actual"
+                : hasPaidPlan
+                ? "Cambiar desde controles superiores"
                 : "Suscribirme a Premium"
             }
             onSelect={() => handleCheckout("premium")}
-            disabled={changingPlan !== null || currentPlan === "premium"}
+            disabled={
+              changingPlan !== null ||
+              currentPlan === "premium" ||
+              hasPaidPlan
+            }
             highlighted={false}
             current={currentPlan === "premium"}
           />
