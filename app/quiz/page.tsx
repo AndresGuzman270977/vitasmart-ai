@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
-import { getPlanLimits, type PlanType } from "../lib/planLimits";
+import {
+  getPlanLabel,
+  getPlanLimits,
+  normalizePlan,
+  type PlanType,
+} from "../lib/planLimits";
 
 const totalSteps = 5;
 
@@ -29,13 +34,15 @@ export default function QuizPage() {
 
     async function loadPlan() {
       try {
-        setPlanLoading(true);
+        if (!ignore) {
+          setPlanLoading(true);
+        }
 
         await ensureUserProfile();
         const profile = await getCurrentUserProfile();
 
         if (!ignore) {
-          setPlan(profile?.plan ?? "free");
+          setPlan(normalizePlan(profile?.plan));
         }
       } catch (error) {
         console.error("No se pudo cargar el plan del usuario:", error);
@@ -86,6 +93,29 @@ export default function QuizPage() {
     if (step > 1) setStep(step - 1);
   };
 
+  const planSummaryTitle = useMemo(() => {
+    if (planLoading) return "Cargando beneficios...";
+    if (plan === "premium") return "Tu plan Premium está activo";
+    if (plan === "pro") return "Tu plan Pro está activo";
+    return "Estás usando el plan Free";
+  }, [plan, planLoading]);
+
+  const planSummaryText = useMemo(() => {
+    if (planLoading) {
+      return "Estamos verificando los beneficios incluidos en tu cuenta.";
+    }
+
+    if (plan === "premium") {
+      return "Recibirás análisis avanzado con IA, recomendaciones más profundas y acceso al marketplace inteligente premium.";
+    }
+
+    if (plan === "pro") {
+      return "Recibirás análisis avanzado con IA, recomendaciones priorizadas y acceso al marketplace inteligente.";
+    }
+
+    return "Al finalizar el quiz verás tu análisis base. Las recomendaciones avanzadas con IA y el marketplace inteligente están disponibles en los planes Pro y Premium.";
+  }, [plan, planLoading]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-2xl rounded-2xl bg-white p-8 shadow-sm">
@@ -95,7 +125,7 @@ export default function QuizPage() {
 
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white">
-            Plan actual: {planLoading ? "Cargando..." : plan.toUpperCase()}
+            Plan actual: {planLoading ? "Cargando..." : getPlanLabel(plan)}
           </div>
 
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
@@ -103,7 +133,8 @@ export default function QuizPage() {
           </div>
 
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
-            Marketplace inteligente: {smartMarketplaceEnabled ? "Activado" : "Bloqueado"}
+            Marketplace inteligente:{" "}
+            {smartMarketplaceEnabled ? "Activado" : "Bloqueado"}
           </div>
         </div>
 
@@ -112,17 +143,30 @@ export default function QuizPage() {
           Responde paso a paso para generar tus recomendaciones.
         </p>
 
-        {!planLoading && plan === "free" && (
-          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <div className="text-sm font-semibold text-amber-900">
-              Estás usando el plan Free
-            </div>
-            <p className="mt-2 text-sm leading-6 text-amber-800">
-              Al finalizar el quiz verás tu análisis base. Las recomendaciones
-              avanzadas con IA y el marketplace inteligente están disponibles en
-              los planes Pro y Premium.
-            </p>
+        <div
+          className={`mt-6 rounded-2xl border p-4 ${
+            plan === "free"
+              ? "border-amber-200 bg-amber-50"
+              : "border-emerald-200 bg-emerald-50"
+          }`}
+        >
+          <div
+            className={`text-sm font-semibold ${
+              plan === "free" ? "text-amber-900" : "text-emerald-900"
+            }`}
+          >
+            {planSummaryTitle}
+          </div>
 
+          <p
+            className={`mt-2 text-sm leading-6 ${
+              plan === "free" ? "text-amber-800" : "text-emerald-800"
+            }`}
+          >
+            {planSummaryText}
+          </p>
+
+          {!planLoading && plan === "free" && (
             <div className="mt-4">
               <Link
                 href="/pricing"
@@ -131,8 +175,8 @@ export default function QuizPage() {
                 Ver planes
               </Link>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="mt-6">
           <div className="mb-2 flex items-center justify-between text-sm text-slate-500">
@@ -299,6 +343,27 @@ export default function QuizPage() {
               }
             />
           </div>
+
+          {!planLoading && plan === "free" && (
+            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
+              <div className="text-sm font-semibold text-sky-900">
+                Mejora el resultado antes de continuar
+              </div>
+              <p className="mt-2 text-sm text-sky-800">
+                Si actualizas ahora, este mismo quiz podrá generar un análisis
+                más profundo y recomendaciones avanzadas con IA.
+              </p>
+
+              <div className="mt-3">
+                <Link
+                  href="/pricing"
+                  className="inline-flex rounded-xl border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-900 hover:bg-sky-100"
+                >
+                  Actualizar plan
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-between">
