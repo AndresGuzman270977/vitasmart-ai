@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
-import { getPlanLabel, getPlanLimits, type UserPlan } from "../lib/planLimits";
+import {
+  getPlanLabel,
+  getPlanLimits,
+  normalizePlan,
+  type UserPlan,
+} from "../lib/planLimits";
 import {
   LineChart,
   Line,
@@ -43,26 +48,28 @@ export default function HistoryPage() {
 
     async function loadHistory() {
       try {
-        setLoading(true);
-        setError("");
-        setNeedsLogin(false);
-
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          throw sessionError;
+        if (!ignore) {
+          setLoading(true);
+          setError("");
+          setNeedsLogin(false);
         }
 
-        const user = session?.user;
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          throw userError;
+        }
 
         if (!user) {
           if (!ignore) {
             setItems([]);
             setAllItemsCount(0);
             setNeedsLogin(true);
+            setPlan("free");
+            setPlanLimit(3);
           }
           return;
         }
@@ -70,14 +77,16 @@ export default function HistoryPage() {
         await ensureUserProfile();
         const profile = await getCurrentUserProfile();
 
-        const userPlan = profile?.plan ?? "free";
-        const limits = getPlanLimits(userPlan);
+        const normalizedPlan = normalizePlan(profile?.plan);
+        const limits = getPlanLimits(normalizedPlan);
         const userPlanLimit = limits.historyLimit;
 
         if (!ignore) {
-          setPlan(userPlan);
+          setPlan(normalizedPlan);
           setPlanLimit(
-            Number.isFinite(userPlanLimit) ? userPlanLimit : Number.POSITIVE_INFINITY
+            Number.isFinite(userPlanLimit)
+              ? userPlanLimit
+              : Number.POSITIVE_INFINITY
           );
         }
 
@@ -101,6 +110,8 @@ export default function HistoryPage() {
           setItems(visibleItems);
         }
       } catch (err: any) {
+        console.error("History error:", err);
+
         if (!ignore) {
           setError(err?.message || "No se pudo cargar el historial.");
         }
@@ -131,6 +142,7 @@ export default function HistoryPage() {
 
   const latestScore = items[0]?.score ?? null;
   const previousScore = items[1]?.score ?? null;
+
   const scoreDelta =
     latestScore !== null && previousScore !== null
       ? latestScore - previousScore
@@ -147,7 +159,9 @@ export default function HistoryPage() {
             VitaSmart AI · Historial
           </div>
 
-          <h1 className="text-3xl font-bold text-slate-900">Health History</h1>
+          <h1 className="text-3xl font-bold text-slate-900">
+            Health History
+          </h1>
 
           <p className="mt-3 text-slate-600">
             Aquí puedes ver los análisis de salud guardados en tu cuenta.
@@ -307,14 +321,22 @@ export default function HistoryPage() {
                             Score {item.score}/100
                           </h2>
 
-                          <p className="mt-2 text-slate-600">{item.summary}</p>
+                          <p className="mt-2 text-slate-600">
+                            {item.summary}
+                          </p>
 
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Badge label={`Edad: ${item.age}`} />
                             <Badge label={`Sexo: ${translateSex(item.sex)}`} />
-                            <Badge label={`Estrés: ${translateStress(item.stress)}`} />
-                            <Badge label={`Sueño: ${translateSleep(item.sleep)}`} />
-                            <Badge label={`Objetivo: ${translateGoal(item.goal)}`} />
+                            <Badge
+                              label={`Estrés: ${translateStress(item.stress)}`}
+                            />
+                            <Badge
+                              label={`Sueño: ${translateSleep(item.sleep)}`}
+                            />
+                            <Badge
+                              label={`Objetivo: ${translateGoal(item.goal)}`}
+                            />
                           </div>
 
                           <div className="mt-4">
@@ -358,8 +380,9 @@ export default function HistoryPage() {
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-700">
-                  Estás viendo solo los primeros {planLimit} análisis de un total
-                  de {allItemsCount}. Actualiza a Pro o Premium para ver más.
+                  Estás viendo solo los primeros {planLimit} análisis de un
+                  total de {allItemsCount}. Actualiza a Pro o Premium para ver
+                  más.
                 </p>
 
                 <Link

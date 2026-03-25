@@ -243,9 +243,9 @@ async function getUserPlanFromRequest(req: Request): Promise<PlanType> {
     .from("user_profiles")
     .select("id, email, plan")
     .eq("id", user.id)
-    .maybeSingle<UserProfileRow>();
+    .maybeSingle();
 
-  return normalizePlan(profile?.plan);
+  return normalizePlan((profile as UserProfileRow | null)?.plan);
 }
 
 export async function POST(req: Request) {

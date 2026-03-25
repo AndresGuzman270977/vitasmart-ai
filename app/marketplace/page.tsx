@@ -16,7 +16,14 @@ import {
 } from "../lib/planLimits";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 
-type CategoryFilter = "all" | "energy" | "stress" | "sleep" | "focus" | "general";
+type CategoryFilter =
+  | "all"
+  | "energy"
+  | "stress"
+  | "sleep"
+  | "focus"
+  | "general";
+
 type PriorityFilter = "all" | "high" | "medium" | "low";
 
 type HealthAssessment = {
@@ -44,10 +51,13 @@ export default function MarketplacePage() {
   const [priority, setPriority] = useState<PriorityFilter>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [latestAssessment, setLatestAssessment] = useState<HealthAssessment | null>(null);
+  const [latestAssessment, setLatestAssessment] =
+    useState<HealthAssessment | null>(null);
   const [rankedProducts, setRankedProducts] = useState<RankedProduct[]>([]);
   const [plan, setPlan] = useState<PlanType>("free");
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+    null
+  );
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
   const [error, setError] = useState("");
 
@@ -56,19 +66,21 @@ export default function MarketplacePage() {
 
     async function loadMarketplace() {
       try {
-        setLoading(true);
-        setError("");
-
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          throw sessionError;
+        if (!ignore) {
+          setLoading(true);
+          setError("");
         }
 
-        if (!session?.user) {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          throw userError;
+        }
+
+        if (!user) {
           if (!ignore) {
             setPlan("free");
             setSubscriptionStatus(null);
@@ -86,7 +98,7 @@ export default function MarketplacePage() {
         const { data, error: assessmentError } = await supabase
           .from("health_assessments")
           .select("id, age, sex, stress, sleep, goal")
-          .eq("user_id", session.user.id)
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -104,7 +116,9 @@ export default function MarketplacePage() {
           setLatestAssessment(latest);
 
           if (latest && limits.marketplaceMode !== "basic") {
-            const ranked = rankProductsForAssessment(latest as AssessmentProfile);
+            const ranked = rankProductsForAssessment(
+              latest as AssessmentProfile
+            );
             setRankedProducts(ranked);
           } else {
             setRankedProducts([]);
@@ -152,7 +166,8 @@ export default function MarketplacePage() {
     if (subscriptionStatus === "past_due") return "Pago pendiente";
     if (subscriptionStatus === "payment_failed") return "Pago fallido";
     if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed") return "Procesando activación";
+    if (subscriptionStatus === "checkout_completed")
+      return "Procesando activación";
     return subscriptionStatus;
   }, [subscriptionStatus]);
 
@@ -192,7 +207,9 @@ export default function MarketplacePage() {
     });
   }, [category, priority, search, rankedProducts, smartMarketplaceEnabled]);
 
-  const topRecommended = smartMarketplaceEnabled ? filteredProducts.slice(0, 3) : [];
+  const topRecommended = smartMarketplaceEnabled
+    ? filteredProducts.slice(0, 3)
+    : [];
   const remainingProducts = smartMarketplaceEnabled
     ? filteredProducts.slice(3)
     : filteredProducts;
@@ -243,8 +260,9 @@ export default function MarketplacePage() {
                 Marketplace inteligente bloqueado para tu plan actual
               </div>
               <div className="mt-1">
-                En el plan Free puedes explorar el catálogo general. Para desbloquear
-                recomendaciones personalizadas según tu análisis, actualiza a Pro o Premium.
+                En el plan Free puedes explorar el catálogo general. Para
+                desbloquear recomendaciones personalizadas según tu análisis,
+                actualiza a Pro o Premium.
               </div>
               <div className="mt-3">
                 <Link
@@ -339,7 +357,9 @@ export default function MarketplacePage() {
 
         {loading ? (
           <div className="mt-8 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-            <p className="text-slate-600">Cargando marketplace inteligente...</p>
+            <p className="text-slate-600">
+              Cargando marketplace inteligente...
+            </p>
           </div>
         ) : error ? (
           <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-8 shadow-sm">
@@ -368,7 +388,8 @@ export default function MarketplacePage() {
                       No encontramos recomendaciones personalizadas
                     </h3>
                     <p className="mt-3 text-slate-600">
-                      Haz un análisis o ajusta los filtros para mejorar el ranking.
+                      Haz un análisis o ajusta los filtros para mejorar el
+                      ranking.
                     </p>
                   </div>
                 ) : (
@@ -395,8 +416,9 @@ export default function MarketplacePage() {
                     Catálogo general disponible
                   </h2>
                   <p className="mt-3 text-slate-600">
-                    Estás viendo el catálogo base del marketplace. Las recomendaciones
-                    inteligentes según tu análisis están disponibles en los planes Pro y Premium.
+                    Estás viendo el catálogo base del marketplace. Las
+                    recomendaciones inteligentes según tu análisis están
+                    disponibles en los planes Pro y Premium.
                   </p>
 
                   <div className="mt-5">
@@ -439,7 +461,9 @@ export default function MarketplacePage() {
                     <ProductCard
                       key={product.slug}
                       product={product}
-                      rankPosition={smartMarketplaceEnabled ? index + 4 : index + 1}
+                      rankPosition={
+                        smartMarketplaceEnabled ? index + 4 : index + 1
+                      }
                       showReasons={smartMarketplaceEnabled}
                       premiumMarketplaceEnabled={premiumMarketplaceEnabled}
                     />

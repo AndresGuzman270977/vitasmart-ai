@@ -5,7 +5,11 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getRecommendations } from "../lib/recommendations";
 import { saveAssessment, type AssessmentAiMode } from "../lib/saveAssessment";
-import { getPlanLimits, type PlanType } from "../lib/planLimits";
+import {
+  getPlanLimits,
+  normalizePlan,
+  type PlanType,
+} from "../lib/planLimits";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import PremiumGate from "../../components/PremiumGate";
 import { supabase } from "../lib/supabase";
@@ -73,7 +77,13 @@ function ResultsPageContent() {
 
   const recommendations = useMemo(() => {
     return getRecommendations(formData);
-  }, [formData.age, formData.sex, formData.stress, formData.sleep, formData.goal]);
+  }, [
+    formData.age,
+    formData.sex,
+    formData.stress,
+    formData.sleep,
+    formData.goal,
+  ]);
 
   const [analysis, setAnalysis] = useState<AiHealthAnalysis | null>(null);
   const [loadingExplanation, setLoadingExplanation] = useState(true);
@@ -81,8 +91,10 @@ function ResultsPageContent() {
   const [saveNotice, setSaveNotice] = useState("");
   const [plan, setPlan] = useState<PlanType>("free");
   const [planLoading, setPlanLoading] = useState(true);
-  const [appliedAiMode, setAppliedAiMode] = useState<AssessmentAiMode>("basic");
-  const [requestedAiMode, setRequestedAiMode] = useState<AssessmentAiMode>("advanced");
+  const [appliedAiMode, setAppliedAiMode] =
+    useState<AssessmentAiMode>("basic");
+  const [requestedAiMode, setRequestedAiMode] =
+    useState<AssessmentAiMode>("advanced");
   const [upgradeRequired, setUpgradeRequired] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const [wasDowngraded, setWasDowngraded] = useState(false);
@@ -92,23 +104,25 @@ function ResultsPageContent() {
 
     async function generateExplanation() {
       try {
-        setLoadingExplanation(true);
-        setPlanLoading(true);
-        setExplanationError("");
-        setAnalysis(null);
-        setSaveNotice("");
-        setUpgradeRequired(false);
-        setUpgradeMessage("");
-        setWasDowngraded(false);
-        setAppliedAiMode("basic");
-        setRequestedAiMode("advanced");
+        if (!ignore) {
+          setLoadingExplanation(true);
+          setPlanLoading(true);
+          setExplanationError("");
+          setAnalysis(null);
+          setSaveNotice("");
+          setUpgradeRequired(false);
+          setUpgradeMessage("");
+          setWasDowngraded(false);
+          setAppliedAiMode("basic");
+          setRequestedAiMode("advanced");
+        }
 
         let resolvedPlan: PlanType = "free";
 
         try {
           await ensureUserProfile();
           const profile = await getCurrentUserProfile();
-          resolvedPlan = profile?.plan ?? "free";
+          resolvedPlan = normalizePlan(profile?.plan);
         } catch (profileError) {
           console.error("No se pudo cargar el perfil del usuario:", profileError);
           resolvedPlan = "free";
@@ -139,10 +153,14 @@ function ResultsPageContent() {
         const data = (await response.json()) as BackendAnalysisResponse;
 
         if (!response.ok) {
-          throw new Error(data?.upgradeMessage || (data as any).error || "No se pudo generar el análisis.");
+          throw new Error(
+            data?.upgradeMessage ||
+              (data as any).error ||
+              "No se pudo generar el análisis."
+          );
         }
 
-        const backendPlan = (data.plan as PlanType) || resolvedPlan;
+        const backendPlan = normalizePlan(data.plan || resolvedPlan);
         const backendAppliedAiMode =
           data.appliedAiMode === "advanced" ? "advanced" : "basic";
         const backendRequestedAiMode =
@@ -190,9 +208,13 @@ function ResultsPageContent() {
 
             if (saveResult.saved) {
               if (backendAppliedAiMode === "advanced") {
-                setSaveNotice("Análisis avanzado guardado correctamente en tu historial.");
+                setSaveNotice(
+                  "Análisis avanzado guardado correctamente en tu historial."
+                );
               } else {
-                setSaveNotice("Análisis base guardado correctamente en tu historial.");
+                setSaveNotice(
+                  "Análisis base guardado correctamente en tu historial."
+                );
               }
             }
 
@@ -217,6 +239,8 @@ function ResultsPageContent() {
           }
         }
       } catch (error: any) {
+        console.error("Results error:", error);
+
         if (!ignore) {
           setExplanationError(
             error?.message ||
@@ -236,7 +260,13 @@ function ResultsPageContent() {
     return () => {
       ignore = true;
     };
-  }, [formData.age, formData.sex, formData.stress, formData.sleep, formData.goal]);
+  }, [
+    formData.age,
+    formData.sex,
+    formData.stress,
+    formData.sleep,
+    formData.goal,
+  ]);
 
   const limits = useMemo(() => getPlanLimits(plan), [plan]);
   const advancedAIEnabled = appliedAiMode === "advanced" && limits.advancedAI;
@@ -256,11 +286,13 @@ function ResultsPageContent() {
             </div>
 
             <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
-              IA solicitada: {requestedAiMode === "advanced" ? "Avanzada" : "Básica"}
+              IA solicitada:{" "}
+              {requestedAiMode === "advanced" ? "Avanzada" : "Básica"}
             </div>
 
             <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
-              IA aplicada: {appliedAiMode === "advanced" ? "Avanzada" : "Básica"}
+              IA aplicada:{" "}
+              {appliedAiMode === "advanced" ? "Avanzada" : "Básica"}
             </div>
           </div>
 
@@ -269,8 +301,8 @@ function ResultsPageContent() {
           </h1>
 
           <p className="text-slate-600">
-            Estas recomendaciones son orientativas y educativas. No sustituyen una
-            consulta médica, un diagnóstico ni una prescripción profesional.
+            Estas recomendaciones son orientativas y educativas. No sustituyen
+            una consulta médica, un diagnóstico ni una prescripción profesional.
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -282,15 +314,23 @@ function ResultsPageContent() {
           </div>
 
           <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            Si tomas medicamentos, tienes hipertensión, enfermedad renal, hepática,
-            problemas cardíacos, trastornos hormonales o cualquier condición médica,
-            consulta con un profesional de salud antes de tomar suplementos.
+            Si tomas medicamentos, tienes hipertensión, enfermedad renal,
+            hepática, problemas cardíacos, trastornos hormonales o cualquier
+            condición médica, consulta con un profesional de salud antes de
+            tomar suplementos.
           </div>
 
           {upgradeRequired && !planLoading && (
             <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
               {upgradeMessage ||
                 "Tu plan actual incluye análisis base. Actualiza a Pro o Premium para desbloquear recomendaciones avanzadas."}
+            </div>
+          )}
+
+          {wasDowngraded && !upgradeRequired && !planLoading && (
+            <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+              Tu plan actual aplicó una versión base del análisis. Actualiza a
+              Pro o Premium para desbloquear recomendaciones avanzadas.
             </div>
           )}
 
@@ -326,7 +366,9 @@ function ResultsPageContent() {
 
         <div className="mt-8 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-1">
-            <h2 className="text-lg font-semibold text-slate-900">Health Score</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Health Score
+            </h2>
 
             {loadingExplanation ? (
               <p className="mt-4 text-slate-600">Calculando...</p>
@@ -379,7 +421,8 @@ function ResultsPageContent() {
                   </div>
                 </div>
 
-                {advancedAIEnabled && analysis?.advancedRecommendations?.length ? (
+                {advancedAIEnabled &&
+                analysis?.advancedRecommendations?.length ? (
                   <div className="mt-6">
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                       Recomendaciones avanzadas IA
@@ -421,17 +464,24 @@ function ResultsPageContent() {
         <div className="mt-6">
           {planLoading ? (
             <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-slate-600">Cargando beneficios de tu plan...</p>
+              <p className="text-slate-600">
+                Cargando beneficios de tu plan...
+              </p>
             </div>
           ) : advancedAIEnabled ? (
             <div className="space-y-4">
               {gatedRecommendations.length > 0 ? (
                 gatedRecommendations.map((item, index) => (
-                  <div key={index} className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div
+                    key={index}
+                    className="rounded-2xl bg-white p-6 shadow-sm"
+                  >
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-xl font-semibold">{item.name}</h2>
+                          <h2 className="text-xl font-semibold">
+                            {item.name}
+                          </h2>
                           <PriorityBadge value={item.priority} />
                           <CategoryBadge value={item.category} />
                         </div>
@@ -444,7 +494,9 @@ function ResultsPageContent() {
 
                         {item.product && (
                           <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                            <div className="text-sm text-slate-500">Producto sugerido</div>
+                            <div className="text-sm text-slate-500">
+                              Producto sugerido
+                            </div>
                             <div className="mt-1 font-semibold text-slate-900">
                               {item.product.productName}
                             </div>
@@ -479,7 +531,8 @@ function ResultsPageContent() {
                     No encontramos recomendaciones
                   </h2>
                   <p className="mt-2 text-slate-600">
-                    Completa correctamente el cuestionario para generar sugerencias.
+                    Completa correctamente el cuestionario para generar
+                    sugerencias.
                   </p>
                 </div>
               )}
