@@ -36,9 +36,19 @@ type ChartItem = {
   score: number;
 };
 
+type DashboardProfile = {
+  plan?: UserPlan | string | null;
+  subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
+};
+
 export default function DashboardPage() {
   const [user, setUser] = useState<DashboardUser | null>(null);
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+    null
+  );
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [items, setItems] = useState<HealthAssessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -60,8 +70,6 @@ export default function DashboardPage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        console.log("DASHBOARD USER DEBUG:", currentUser);
-
         if (userError) {
           throw userError;
         }
@@ -72,6 +80,8 @@ export default function DashboardPage() {
             setItems([]);
             setUser(null);
             setUserPlan(null);
+            setSubscriptionStatus(null);
+            setCancelAtPeriodEnd(false);
           }
           return;
         }
@@ -84,16 +94,20 @@ export default function DashboardPage() {
         }
 
         try {
-          const profile = await getCurrentUserProfile();
+          const profile = (await getCurrentUserProfile()) as DashboardProfile | null;
 
           if (!ignore) {
             setUserPlan(normalizePlan(profile?.plan));
+            setSubscriptionStatus(profile?.subscription_status ?? null);
+            setCancelAtPeriodEnd(Boolean(profile?.cancel_at_period_end));
           }
         } catch (profileError) {
           console.error("Dashboard profile error:", profileError);
 
           if (!ignore) {
             setUserPlan("free");
+            setSubscriptionStatus(null);
+            setCancelAtPeriodEnd(false);
           }
         }
 
@@ -126,16 +140,27 @@ export default function DashboardPage() {
 
     loadDashboard();
 
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      if (ignore) return;
+      setTimeout(() => {
+        if (!ignore) {
+          loadDashboard();
+        }
+      }, 0);
+    });
+
     return () => {
       ignore = true;
+      subscription.unsubscribe();
     };
   }, []);
 
   const latest = items[0] ?? null;
   const previous = items[1] ?? null;
 
-  const scoreDelta =
-    latest && previous ? latest.score - previous.score : null;
+  const scoreDelta = latest && previous ? latest.score - previous.score : null;
 
   const latestFactors = useMemo(() => {
     if (!latest?.factors || !Array.isArray(latest.factors)) return [];
@@ -169,6 +194,38 @@ export default function DashboardPage() {
     return Number.isFinite(limits.historyLimit)
       ? `${limits.historyLimit}`
       : "Ilimitado";
+  }, [userPlan]);
+
+  const subscriptionStatusLabel = useMemo(() => {
+    if (!subscriptionStatus) return "Sin suscripción activa";
+
+    if (subscriptionStatus === "active") {
+      return cancelAtPeriodEnd
+        ? "Activa · cancelación programada"
+        : "Activa";
+    }
+
+    if (subscriptionStatus === "trialing") return "En prueba";
+    if (subscriptionStatus === "past_due") return "Pago pendiente";
+    if (subscriptionStatus === "payment_failed") return "Pago fallido";
+    if (subscriptionStatus === "canceled") return "Cancelada";
+    if (subscriptionStatus === "checkout_completed")
+      return "Procesando activación";
+
+    return subscriptionStatus;
+  }, [subscriptionStatus, cancelAtPeriodEnd]);
+
+  const advancedAIEnabled = useMemo(() => {
+    if (!userPlan) return false;
+    return getPlanLimits(userPlan).advancedAI;
+  }, [userPlan]);
+
+  const marketplaceModeLabel = useMemo(() => {
+    if (!userPlan) return "-";
+    const mode = getPlanLimits(userPlan).marketplaceMode;
+    if (mode === "premium") return "Premium";
+    if (mode === "smart") return "Inteligente";
+    return "General";
   }, [userPlan]);
 
   return (
@@ -261,10 +318,59 @@ export default function DashboardPage() {
 
                 {userPlan && (
                   <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                    Estado: {subscriptionStatusLabel}
+                  </span>
+                )}
+
+                {userPlan && (
+                  <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
                     Límite de análisis: {planLimitText}
                   </span>
                 )}
               </div>
+
+              {userPlan === "free" && (
+                <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <div className="text-sm font-semibold text-sky-900">
+                    Desbloquea más con Pro o Premium
+                  </div>
+                  <p className="mt-2 text-sm text-sky-800">
+                    Tu plan Free incluye historial limitado, análisis base y
+                    marketplace general. Actualiza para desbloquear IA avanzada,
+                    recomendaciones priorizadas y un marketplace inteligente.
+                  </p>
+
+                  <div className="mt-4">
+                    <Link
+                      href="/pricing"
+                      className="inline-flex rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-700"
+                    >
+                      Ver planes
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {cancelAtPeriodEnd && (
+                <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="text-sm font-semibold text-amber-900">
+                    Tu suscripción sigue activa, pero tiene cancelación programada
+                  </div>
+                  <p className="mt-2 text-sm text-amber-800">
+                    Puedes reactivarla desde la página de Pricing antes de que
+                    termine el período actual.
+                  </p>
+
+                  <div className="mt-4">
+                    <Link
+                      href="/pricing"
+                      className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 font-semibold text-amber-900 transition hover:bg-amber-100"
+                    >
+                      Gestionar suscripción
+                    </Link>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <Link
@@ -325,6 +431,26 @@ export default function DashboardPage() {
                 title="Plan actual"
                 value={userPlan ? getPlanLabel(userPlan) : "-"}
                 subtitle="Nivel activo de tu cuenta"
+              />
+            </section>
+
+            <section className="mt-8 grid gap-6 md:grid-cols-3">
+              <MetricCard
+                title="IA avanzada"
+                value={advancedAIEnabled ? "Sí" : "No"}
+                subtitle="Disponibilidad según tu plan"
+              />
+
+              <MetricCard
+                title="Marketplace"
+                value={marketplaceModeLabel}
+                subtitle="Modo activo del catálogo"
+              />
+
+              <MetricCard
+                title="Suscripción"
+                value={subscriptionStatusLabel}
+                subtitle="Estado actual de facturación"
               />
             </section>
 

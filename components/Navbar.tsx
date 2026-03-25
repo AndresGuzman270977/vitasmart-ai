@@ -16,9 +16,19 @@ type NavbarUser = {
   email?: string;
 };
 
+type NavbarProfile = {
+  plan?: UserPlan | string | null;
+  subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
+};
+
 export default function Navbar() {
   const [user, setUser] = useState<NavbarUser | null>(null);
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+    null
+  );
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [loading, setLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -27,13 +37,22 @@ export default function Navbar() {
   useEffect(() => {
     let mounted = true;
 
-    async function resolvePlanSafe() {
+    async function resolveProfileSafe() {
       try {
-        const profile = await getCurrentUserProfile();
-        return normalizePlan(profile?.plan);
+        const profile = (await getCurrentUserProfile()) as NavbarProfile | null;
+
+        return {
+          plan: normalizePlan(profile?.plan),
+          subscriptionStatus: profile?.subscription_status ?? null,
+          cancelAtPeriodEnd: Boolean(profile?.cancel_at_period_end),
+        };
       } catch (error) {
-        console.error("Navbar: no se pudo cargar el plan del usuario:", error);
-        return "free" as UserPlan;
+        console.error("Navbar: no se pudo cargar el perfil del usuario:", error);
+        return {
+          plan: "free" as UserPlan,
+          subscriptionStatus: null,
+          cancelAtPeriodEnd: false,
+        };
       }
     }
 
@@ -43,8 +62,6 @@ export default function Navbar() {
           data: { user: currentUser },
           error,
         } = await supabase.auth.getUser();
-
-        console.log("NAVBAR USER DEBUG:", currentUser);
 
         if (error) {
           console.error("Navbar getUser error:", error);
@@ -60,14 +77,18 @@ export default function Navbar() {
 
           setLoading(false);
 
-          const plan = await resolvePlanSafe();
+          const profile = await resolveProfileSafe();
 
           if (mounted) {
-            setUserPlan(plan);
+            setUserPlan(profile.plan);
+            setSubscriptionStatus(profile.subscriptionStatus);
+            setCancelAtPeriodEnd(profile.cancelAtPeriodEnd);
           }
         } else {
           setUser(null);
           setUserPlan(null);
+          setSubscriptionStatus(null);
+          setCancelAtPeriodEnd(false);
           setLoading(false);
         }
       } catch (error) {
@@ -76,6 +97,8 @@ export default function Navbar() {
         if (mounted) {
           setUser(null);
           setUserPlan(null);
+          setSubscriptionStatus(null);
+          setCancelAtPeriodEnd(false);
           setLoading(false);
         }
       }
@@ -99,14 +122,18 @@ export default function Navbar() {
             });
             setLoading(false);
 
-            const plan = await resolvePlanSafe();
+            const profile = await resolveProfileSafe();
 
             if (mounted) {
-              setUserPlan(plan);
+              setUserPlan(profile.plan);
+              setSubscriptionStatus(profile.subscriptionStatus);
+              setCancelAtPeriodEnd(profile.cancelAtPeriodEnd);
             }
           } else {
             setUser(null);
             setUserPlan(null);
+            setSubscriptionStatus(null);
+            setCancelAtPeriodEnd(false);
             setLoading(false);
           }
         } catch (error) {
@@ -115,6 +142,8 @@ export default function Navbar() {
           if (mounted) {
             setUser(null);
             setUserPlan("free");
+            setSubscriptionStatus(null);
+            setCancelAtPeriodEnd(false);
             setLoading(false);
           }
         }
@@ -156,6 +185,8 @@ export default function Navbar() {
       await signOutUser();
       setUser(null);
       setUserPlan(null);
+      setSubscriptionStatus(null);
+      setCancelAtPeriodEnd(false);
       setMenuOpen(false);
       window.location.href = "/";
     } catch (error) {
@@ -166,6 +197,25 @@ export default function Navbar() {
   }
 
   const userLabel = getUserLabel(user?.email);
+
+  const subscriptionStatusLabel = (() => {
+    if (!subscriptionStatus) return "Sin suscripción activa";
+
+    if (subscriptionStatus === "active") {
+      return cancelAtPeriodEnd
+        ? "Activa · cancelación programada"
+        : "Activa";
+    }
+
+    if (subscriptionStatus === "trialing") return "En prueba";
+    if (subscriptionStatus === "past_due") return "Pago pendiente";
+    if (subscriptionStatus === "payment_failed") return "Pago fallido";
+    if (subscriptionStatus === "canceled") return "Cancelada";
+    if (subscriptionStatus === "checkout_completed")
+      return "Procesando activación";
+
+    return subscriptionStatus;
+  })();
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -218,7 +268,7 @@ export default function Navbar() {
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+                <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                   <div className="border-b border-slate-100 px-3 py-3">
                     <div className="text-sm font-semibold text-slate-900">
                       {userLabel.name}
@@ -232,6 +282,10 @@ export default function Navbar() {
                         Plan {getPlanLabel(userPlan)}
                       </div>
                     )}
+
+                    <div className="mt-2 text-xs text-slate-500">
+                      Estado: {subscriptionStatusLabel}
+                    </div>
                   </div>
 
                   <div className="py-2">
@@ -261,6 +315,25 @@ export default function Navbar() {
                       onClick={() => setMenuOpen(false)}
                     />
                   </div>
+
+                  {userPlan === "free" && (
+                    <div className="border-t border-slate-100 px-3 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Mejora tu experiencia
+                      </div>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Desbloquea IA avanzada, historial ampliado y marketplace
+                        inteligente.
+                      </p>
+                      <Link
+                        href="/pricing"
+                        onClick={() => setMenuOpen(false)}
+                        className="mt-3 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        Ver planes
+                      </Link>
+                    </div>
+                  )}
 
                   <div className="border-t border-slate-100 px-2 pt-2">
                     <button
