@@ -149,6 +149,15 @@ export async function POST(req: Request) {
         }
       );
 
+      await supabase
+        .from("user_profiles")
+        .update({
+          plan: targetPlan,
+          subscription_status: updatedSubscription.status,
+          cancel_at_period_end: updatedSubscription.cancel_at_period_end ?? false,
+        })
+        .eq("id", user.id);
+
       return NextResponse.json({
         ok: true,
         action,
@@ -166,6 +175,14 @@ export async function POST(req: Request) {
           cancel_at_period_end: true,
         }
       );
+
+      await supabase
+        .from("user_profiles")
+        .update({
+          subscription_status: updatedSubscription.status,
+          cancel_at_period_end: true,
+        })
+        .eq("id", user.id);
 
       return NextResponse.json({
         ok: true,
@@ -185,6 +202,14 @@ export async function POST(req: Request) {
           cancel_at_period_end: false,
         }
       );
+
+      await supabase
+        .from("user_profiles")
+        .update({
+          subscription_status: updatedSubscription.status,
+          cancel_at_period_end: false,
+        })
+        .eq("id", user.id);
 
       return NextResponse.json({
         ok: true,

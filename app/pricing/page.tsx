@@ -18,6 +18,7 @@ type UserProfileRow = {
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
   subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -68,6 +69,7 @@ function PricingPageContent() {
   const [currentPlan, setCurrentPlan] = useState<UserPlan | null>(null);
   const [currentSubscriptionStatus, setCurrentSubscriptionStatus] =
     useState<string | null>(null);
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
 
@@ -107,7 +109,7 @@ function PricingPageContent() {
     const { data: existingProfile, error: existingError } = await supabase
       .from("user_profiles")
       .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
+        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -124,13 +126,14 @@ function PricingPageContent() {
       id: userId,
       email: email ?? null,
       plan: "free" as UserPlan,
+      cancel_at_period_end: false,
     };
 
     const { data: createdProfile, error: createError } = await supabase
       .from("user_profiles")
       .upsert([payload], { onConflict: "id" })
       .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status"
+        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
       )
       .single();
 
@@ -148,6 +151,7 @@ function PricingPageContent() {
       setCurrentUserId(null);
       setCurrentPlan(null);
       setCurrentSubscriptionStatus(null);
+      setCancelAtPeriodEnd(false);
       setHasStripeCustomer(false);
       setHasStripeSubscription(false);
       return;
@@ -158,6 +162,7 @@ function PricingPageContent() {
     setCurrentUserId(user.id);
     setCurrentPlan(normalizePlan(profile?.plan));
     setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
+    setCancelAtPeriodEnd(Boolean(profile?.cancel_at_period_end));
     setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
     setHasStripeSubscription(Boolean(profile?.stripe_subscription_id));
   }
@@ -192,6 +197,7 @@ function PricingPageContent() {
             setCurrentUserId(null);
             setCurrentPlan(null);
             setCurrentSubscriptionStatus(null);
+            setCancelAtPeriodEnd(false);
             setHasStripeCustomer(false);
             setHasStripeSubscription(false);
           }
@@ -204,6 +210,7 @@ function PricingPageContent() {
           setCurrentUserId(user.id);
           setCurrentPlan(normalizePlan(profile?.plan));
           setCurrentSubscriptionStatus(profile?.subscription_status ?? null);
+          setCancelAtPeriodEnd(Boolean(profile?.cancel_at_period_end));
           setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
           setHasStripeSubscription(Boolean(profile?.stripe_subscription_id));
         }
@@ -214,6 +221,7 @@ function PricingPageContent() {
           setCurrentUserId(null);
           setCurrentPlan(null);
           setCurrentSubscriptionStatus(null);
+          setCancelAtPeriodEnd(false);
           setHasStripeCustomer(false);
           setHasStripeSubscription(false);
           setMessage(
@@ -437,7 +445,13 @@ function PricingPageContent() {
 
   const subscriptionStatusLabel = useMemo(() => {
     if (!currentSubscriptionStatus) return "Sin suscripción activa";
-    if (currentSubscriptionStatus === "active") return "Activa";
+
+    if (currentSubscriptionStatus === "active") {
+      return cancelAtPeriodEnd
+        ? "Activa · cancelación programada"
+        : "Activa";
+    }
+
     if (currentSubscriptionStatus === "trialing") return "En prueba";
     if (currentSubscriptionStatus === "past_due") return "Pago pendiente";
     if (currentSubscriptionStatus === "payment_failed") return "Pago fallido";
@@ -445,8 +459,9 @@ function PricingPageContent() {
     if (currentSubscriptionStatus === "checkout_completed") {
       return "Procesando activación";
     }
+
     return currentSubscriptionStatus;
-  }, [currentSubscriptionStatus]);
+  }, [currentSubscriptionStatus, cancelAtPeriodEnd]);
 
   const canOpenPortal =
     Boolean(currentUserId) &&
@@ -472,13 +487,13 @@ function PricingPageContent() {
   const canCancelAtPeriodEnd =
     hasPaidPlan &&
     hasStripeSubscription &&
-    currentSubscriptionStatus !== "canceled" &&
+    !cancelAtPeriodEnd &&
     subscriptionActionLoading === null;
 
   const canResume =
     hasPaidPlan &&
     hasStripeSubscription &&
-    currentSubscriptionStatus === "canceled" &&
+    cancelAtPeriodEnd &&
     subscriptionActionLoading === null;
 
   return (

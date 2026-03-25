@@ -14,6 +14,7 @@ type UpsertUserProfileInput = {
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
   subscriptionStatus?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
 };
 
 async function upsertUserProfile({
@@ -23,6 +24,7 @@ async function upsertUserProfile({
   stripeCustomerId,
   stripeSubscriptionId,
   subscriptionStatus,
+  cancelAtPeriodEnd,
 }: UpsertUserProfileInput) {
   const payload: Record<string, unknown> = {
     id: userId,
@@ -42,6 +44,10 @@ async function upsertUserProfile({
     payload.subscription_status = subscriptionStatus;
   }
 
+  if (typeof cancelAtPeriodEnd === "boolean") {
+    payload.cancel_at_period_end = cancelAtPeriodEnd;
+  }
+
   const { error } = await supabaseAdmin
     .from("user_profiles")
     .upsert([payload], { onConflict: "id" });
@@ -53,7 +59,8 @@ async function upsertUserProfile({
       message.includes("column") &&
       (message.includes("stripe_customer_id") ||
         message.includes("stripe_subscription_id") ||
-        message.includes("subscription_status"));
+        message.includes("subscription_status") ||
+        message.includes("cancel_at_period_end"));
 
     if (hasOptionalColumnIssue) {
       const fallbackPayload = {
@@ -137,6 +144,7 @@ async function resolveUserIdFromSubscription(params: {
   metadataPlan: PlanType;
   priceId: string | null;
   status: string;
+  cancelAtPeriodEnd: boolean;
 }> {
   const directUserId = getMetadataUserId(params.metadata);
   const directPlan = getMetadataPlan(params.metadata);
@@ -149,6 +157,7 @@ async function resolveUserIdFromSubscription(params: {
       metadataPlan: directPlan,
       priceId,
       status: subscription.status || "",
+      cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
     };
   }
 
@@ -169,6 +178,7 @@ async function resolveUserIdFromSubscription(params: {
           metadataPlan: retrievedPlan,
           priceId,
           status: subscription.status || "",
+          cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
         };
       }
     } catch (error) {
@@ -186,6 +196,7 @@ async function resolveUserIdFromSubscription(params: {
     metadataPlan: directPlan,
     priceId: null,
     status: "",
+    cancelAtPeriodEnd: false,
   };
 }
 
@@ -241,6 +252,7 @@ export async function POST(req: Request) {
           "";
 
         let plan = getMetadataPlan(session.metadata);
+        let cancelAtPeriodEnd = false;
 
         if ((!userId || plan === "free") && stripeSubscriptionId) {
           try {
@@ -252,6 +264,8 @@ export async function POST(req: Request) {
             const retrievedUserId = getMetadataUserId(metadata);
             const retrievedPlan = getMetadataPlan(metadata);
             const priceId = subscription.items.data?.[0]?.price?.id || null;
+
+            cancelAtPeriodEnd = subscription.cancel_at_period_end ?? false;
 
             if (!userId) {
               userId = retrievedUserId;
@@ -284,6 +298,7 @@ export async function POST(req: Request) {
           email,
           stripeCustomerId,
           stripeSubscriptionId,
+          cancelAtPeriodEnd,
         });
 
         if (userId && plan !== "free") {
@@ -294,6 +309,7 @@ export async function POST(req: Request) {
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: "checkout_completed",
+            cancelAtPeriodEnd,
           });
         } else {
           console.warn(
@@ -311,6 +327,7 @@ export async function POST(req: Request) {
           customer?: string | null;
           metadata?: StripeMetadata;
           status?: string;
+          cancel_at_period_end?: boolean;
           items?: {
             data?: Array<{
               price?: {
@@ -335,6 +352,10 @@ export async function POST(req: Request) {
         const metadataPlan = resolved.metadataPlan;
         const priceId = resolved.priceId || fallbackPriceId;
         const status = resolved.status || subscription.status || "";
+        const cancelAtPeriodEnd =
+          resolved.cancelAtPeriodEnd ??
+          subscription.cancel_at_period_end ??
+          false;
 
         const resolvedPlan =
           metadataPlan !== "free"
@@ -350,6 +371,7 @@ export async function POST(req: Request) {
           status,
           stripeCustomerId,
           stripeSubscriptionId,
+          cancelAtPeriodEnd,
         });
 
         if (!resolved.userId) {
@@ -370,6 +392,7 @@ export async function POST(req: Request) {
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: status,
+            cancelAtPeriodEnd,
           });
         } else {
           await upsertUserProfile({
@@ -378,6 +401,7 @@ export async function POST(req: Request) {
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: status,
+            cancelAtPeriodEnd,
           });
         }
 
@@ -390,6 +414,7 @@ export async function POST(req: Request) {
           customer?: string | null;
           metadata?: StripeMetadata;
           status?: string;
+          cancel_at_period_end?: boolean;
         };
 
         const stripeCustomerId = subscription.customer || null;
@@ -417,6 +442,7 @@ export async function POST(req: Request) {
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: status,
+            cancelAtPeriodEnd: false,
           });
         }
 
@@ -452,8 +478,6 @@ export async function POST(req: Request) {
           getMetadataUserId(metadataFromParent) ||
           getMetadataUserId(metadataFromLine);
 
-        const priceId = invoice.lines?.data?.[0]?.price?.id || null;
-
         if (!userId) {
           userId = await findUserIdByStripeRefs({
             stripeCustomerId,
@@ -463,7 +487,6 @@ export async function POST(req: Request) {
 
         console.log("invoice.payment_failed", {
           userId,
-          priceId,
           stripeCustomerId,
           stripeSubscriptionId,
         });
@@ -475,6 +498,7 @@ export async function POST(req: Request) {
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: "payment_failed",
+            cancelAtPeriodEnd: false,
           });
         }
 
