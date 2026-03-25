@@ -59,28 +59,8 @@ export default function HomePage() {
 
     checkSession();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (ignore) return;
-
-      setTimeout(() => {
-        if (ignore) return;
-
-        if (session?.user) {
-          setHasSession(true);
-          setCheckingSession(false);
-          router.replace("/dashboard");
-        } else {
-          setHasSession(false);
-          setCheckingSession(false);
-        }
-      }, 0);
-    });
-
     return () => {
       ignore = true;
-      subscription.unsubscribe();
     };
   }, [router]);
 

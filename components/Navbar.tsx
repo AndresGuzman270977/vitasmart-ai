@@ -39,21 +39,23 @@ export default function Navbar() {
 
     async function loadUser() {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        const session = data?.session ?? null;
+        const {
+          data: { user: currentUser },
+          error,
+        } = await supabase.auth.getUser();
 
-        console.log("NAVBAR SESSION DEBUG:", session);
+        console.log("NAVBAR USER DEBUG:", currentUser);
 
         if (error) {
-          console.error("Navbar getSession error:", error);
+          console.error("Navbar getUser error:", error);
         }
 
         if (!mounted) return;
 
-        if (session?.user) {
+        if (currentUser) {
           setUser({
-            id: session.user.id,
-            email: session.user.email,
+            id: currentUser.id,
+            email: currentUser.email,
           });
 
           setLoading(false);
@@ -83,35 +85,40 @@ export default function Navbar() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
 
-      try {
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-          });
-          setLoading(false);
+      setTimeout(async () => {
+        if (!mounted) return;
 
-          const plan = await resolvePlanSafe();
+        try {
+          if (session?.user) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email,
+            });
+            setLoading(false);
+
+            const plan = await resolvePlanSafe();
+
+            if (mounted) {
+              setUserPlan(plan);
+            }
+          } else {
+            setUser(null);
+            setUserPlan(null);
+            setLoading(false);
+          }
+        } catch (error) {
+          console.error("Navbar auth state error:", error);
 
           if (mounted) {
-            setUserPlan(plan);
+            setUser(null);
+            setUserPlan("free");
+            setLoading(false);
           }
-        } else {
-          setUser(null);
-          setUserPlan(null);
-          setLoading(false);
         }
-      } catch (error) {
-        console.error("Navbar auth state error:", error);
-
-        if (mounted) {
-          setUserPlan("free");
-          setLoading(false);
-        }
-      }
+      }, 0);
     });
 
     return () => {

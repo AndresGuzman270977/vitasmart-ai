@@ -364,8 +364,9 @@ function PricingPageContent() {
     if (currentSubscriptionStatus === "past_due") return "Pago pendiente";
     if (currentSubscriptionStatus === "payment_failed") return "Pago fallido";
     if (currentSubscriptionStatus === "canceled") return "Cancelada";
-    if (currentSubscriptionStatus === "checkout_completed")
+    if (currentSubscriptionStatus === "checkout_completed") {
       return "Procesando activación";
+    }
     return currentSubscriptionStatus;
   }, [currentSubscriptionStatus]);
 

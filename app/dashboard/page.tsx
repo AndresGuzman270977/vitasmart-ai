@@ -126,32 +126,8 @@ export default function DashboardPage() {
 
     loadDashboard();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("DASHBOARD AUTH CHANGE:", _event, session?.user?.id ?? null);
-
-      if (ignore) return;
-
-      setTimeout(() => {
-        if (ignore) return;
-
-        if (!session?.user) {
-          setNeedsLogin(true);
-          setUser(null);
-          setUserPlan(null);
-          setItems([]);
-          setLoading(false);
-          return;
-        }
-
-        loadDashboard();
-      }, 0);
-    });
-
     return () => {
       ignore = true;
-      subscription.unsubscribe();
     };
   }, []);
 
