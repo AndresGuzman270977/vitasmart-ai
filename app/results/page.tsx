@@ -12,6 +12,7 @@ import {
 } from "../lib/planLimits";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import PremiumGate from "../../components/PremiumGate";
+import UpgradePrompt from "../../components/UpgradePrompt";
 import { supabase } from "../lib/supabase";
 
 type AdvancedRecommendation = {
@@ -51,7 +52,7 @@ export default function ResultsPage() {
                 VitaSmart AI · Resultados
               </div>
               <h1 className="mb-4 text-3xl font-bold">
-                Tus recomendaciones personalizadas
+                Tu lectura personalizada
               </h1>
               <p className="text-slate-600">Cargando resultados...</p>
             </div>
@@ -272,6 +273,28 @@ function ResultsPageContent() {
   const advancedAIEnabled = appliedAiMode === "advanced" && limits.advancedAI;
   const gatedRecommendations = advancedAIEnabled ? recommendations : [];
 
+  const resultTone = useMemo(() => {
+    const score = analysis?.score ?? 0;
+    if (score >= 85) return "Muy buen punto de partida";
+    if (score >= 70) return "Base sólida con espacio para mejorar";
+    if (score >= 55) return "Hay oportunidades claras de mejora";
+    return "Conviene actuar con más intención";
+  }, [analysis?.score]);
+
+  const resultNarrative = useMemo(() => {
+    const score = analysis?.score ?? 0;
+    if (score >= 85) {
+      return "Tu perfil actual muestra señales positivas. La clave ahora es sostener hábitos y ganar continuidad.";
+    }
+    if (score >= 70) {
+      return "Tu situación actual tiene una base razonable, pero aún hay ajustes que podrían elevar tu energía, enfoque o bienestar general.";
+    }
+    if (score >= 55) {
+      return "Tu resultado sugiere que hay varias áreas donde pequeños cambios consistentes podrían generar una mejora visible.";
+    }
+    return "Este resultado no es una sentencia: es una oportunidad para ordenar prioridades y empezar a construir una versión más fuerte de tu bienestar.";
+  }, [analysis?.score]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-5xl">
@@ -296,13 +319,12 @@ function ResultsPageContent() {
             </div>
           </div>
 
-          <h1 className="mb-4 text-3xl font-bold">
-            Tus recomendaciones personalizadas
-          </h1>
+          <h1 className="mb-4 text-3xl font-bold">Tu lectura personalizada</h1>
 
           <p className="text-slate-600">
-            Estas recomendaciones son orientativas y educativas. No sustituyen
-            una consulta médica, un diagnóstico ni una prescripción profesional.
+            Este resultado está diseñado para ayudarte a entender mejor tu punto
+            de partida actual y tomar decisiones más conscientes sobre tu
+            bienestar.
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -380,7 +402,10 @@ function ResultsPageContent() {
                   {analysis?.score ?? "-"}
                   <span className="text-xl text-slate-500">/100</span>
                 </div>
-                <p className="mt-3 text-sm text-slate-600">
+                <p className="mt-3 text-sm font-semibold text-slate-900">
+                  {resultTone}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
                   Estimación orientativa basada en tu perfil actual.
                 </p>
               </>
@@ -403,6 +428,15 @@ function ResultsPageContent() {
                 <p className="mt-3 leading-7 text-slate-700">
                   {analysis?.summary}
                 </p>
+
+                <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Lectura general
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {resultNarrative}
+                  </p>
+                </div>
 
                 <div className="mt-5">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -450,6 +484,32 @@ function ResultsPageContent() {
           </div>
         </div>
 
+        <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+          <h2 className="text-2xl font-bold text-slate-900">
+            Qué significa este resultado para ti
+          </h2>
+          <p className="mt-3 text-slate-600">
+            El verdadero valor no está solo en ver un score, sino en usar este
+            resultado como referencia para construir hábitos más consistentes y
+            mejorar con continuidad.
+          </p>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <InsightCard
+              title="Claridad"
+              description="Te ayuda a entender mejor tu situación actual."
+            />
+            <InsightCard
+              title="Dirección"
+              description="Te muestra hacia dónde conviene poner atención."
+            />
+            <InsightCard
+              title="Continuidad"
+              description="Gana más valor cuando repites el análisis en el tiempo."
+            />
+          </div>
+        </div>
+
         <div className="mt-8">
           <h2 className="text-2xl font-bold text-slate-900">
             Recomendaciones priorizadas
@@ -479,9 +539,7 @@ function ResultsPageContent() {
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-xl font-semibold">
-                            {item.name}
-                          </h2>
+                          <h2 className="text-xl font-semibold">{item.name}</h2>
                           <PriorityBadge value={item.priority} />
                           <CategoryBadge value={item.category} />
                         </div>
@@ -538,11 +596,19 @@ function ResultsPageContent() {
               )}
             </div>
           ) : (
-            <PremiumGate
-              title="Recomendaciones avanzadas bloqueadas"
-              description="Tu plan actual incluye el análisis base. Actualiza a VitaSmart Pro o Premium para desbloquear recomendaciones priorizadas, sugerencias más profundas y acceso avanzado al marketplace inteligente."
-              requiredPlan="pro"
-            />
+            <>
+              <PremiumGate
+                title="Recomendaciones avanzadas bloqueadas"
+                description="Tu plan actual incluye el análisis base. Actualiza a VitaSmart Pro o Premium para desbloquear recomendaciones priorizadas, sugerencias más profundas y acceso avanzado al marketplace inteligente."
+                requiredPlan="pro"
+              />
+
+              {plan !== "premium" && (
+                <div className="mt-8">
+                  <UpgradePrompt currentPlan={plan} context="results" />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -555,6 +621,21 @@ function Info({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border p-3">
       <div className="text-sm text-gray-500">{label}</div>
       <div className="font-semibold">{value || "-"}</div>
+    </div>
+  );
+}
+
+function InsightCard({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <div className="text-lg font-semibold text-slate-900">{title}</div>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
     </div>
   );
 }

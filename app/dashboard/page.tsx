@@ -10,6 +10,7 @@ import {
   normalizePlan,
   type UserPlan,
 } from "../lib/planLimits";
+import UpgradePrompt from "../../components/UpgradePrompt";
 import HealthChart from "../../components/HealthChart";
 
 type HealthAssessment = {
@@ -94,7 +95,8 @@ export default function DashboardPage() {
         }
 
         try {
-          const profile = (await getCurrentUserProfile()) as DashboardProfile | null;
+          const profile =
+            (await getCurrentUserProfile()) as DashboardProfile | null;
 
           if (!ignore) {
             setUserPlan(normalizePlan(profile?.plan));
@@ -563,6 +565,12 @@ export default function DashboardPage() {
                 />
               </div>
             </section>
+
+            {userPlan && userPlan !== "premium" && (
+              <section className="mt-8">
+                <UpgradePrompt currentPlan={userPlan} context="dashboard" />
+              </section>
+            )}
           </>
         )}
       </div>

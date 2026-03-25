@@ -1,15 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
-import {
-  getPlanLabel,
-  getPlanLimits,
-  normalizePlan,
-  type PlanType,
-} from "../lib/planLimits";
+import { getPlanLimits, normalizePlan, type PlanType } from "../lib/planLimits";
+import UpgradePrompt from "../../components/UpgradePrompt";
 
 const totalSteps = 5;
 
@@ -34,9 +30,7 @@ export default function QuizPage() {
 
     async function loadPlan() {
       try {
-        if (!ignore) {
-          setPlanLoading(true);
-        }
+        setPlanLoading(true);
 
         await ensureUserProfile();
         const profile = await getCurrentUserProfile();
@@ -46,6 +40,7 @@ export default function QuizPage() {
         }
       } catch (error) {
         console.error("No se pudo cargar el plan del usuario:", error);
+
         if (!ignore) {
           setPlan("free");
         }
@@ -67,6 +62,22 @@ export default function QuizPage() {
   const advancedAIEnabled = limits.advancedAI;
   const smartMarketplaceEnabled = limits.marketplaceMode !== "basic";
 
+  const quizNarrative = useMemo(() => {
+    if (planLoading) {
+      return "Estamos cargando los beneficios de tu plan actual.";
+    }
+
+    if (plan === "premium") {
+      return "Estás entrando con la experiencia más completa de VitaSmart AI.";
+    }
+
+    if (plan === "pro") {
+      return "Tu plan actual ya desbloquea una experiencia mucho más profunda y útil.";
+    }
+
+    return "Estás usando la entrada base. El análisis será útil, pero Pro y Premium desbloquean una lectura mucho más avanzada.";
+  }, [plan, planLoading]);
+
   const handleNext = () => {
     if (step === 1 && !formData.age) return;
     if (step === 2 && !formData.sex) return;
@@ -76,314 +87,284 @@ export default function QuizPage() {
 
     if (step < totalSteps) {
       setStep(step + 1);
-    } else {
-      const params = new URLSearchParams({
-        age: formData.age,
-        sex: formData.sex,
-        stress: formData.stress,
-        sleep: formData.sleep,
-        goal: formData.goal,
-      });
-
-      router.push(`/results?${params.toString()}`);
+      return;
     }
+
+    const params = new URLSearchParams({
+      age: formData.age,
+      sex: formData.sex,
+      stress: formData.stress,
+      sleep: formData.sleep,
+      goal: formData.goal,
+    });
+
+    router.push(`/results?${params.toString()}`);
   };
 
   const handleBack = () => {
-    if (step > 1) setStep(step - 1);
+    if (step > 1) {
+      setStep(step - 1);
+    }
   };
-
-  const planSummaryTitle = useMemo(() => {
-    if (planLoading) return "Cargando beneficios...";
-    if (plan === "premium") return "Tu plan Premium está activo";
-    if (plan === "pro") return "Tu plan Pro está activo";
-    return "Estás usando el plan Free";
-  }, [plan, planLoading]);
-
-  const planSummaryText = useMemo(() => {
-    if (planLoading) {
-      return "Estamos verificando los beneficios incluidos en tu cuenta.";
-    }
-
-    if (plan === "premium") {
-      return "Recibirás análisis avanzado con IA, recomendaciones más profundas y acceso al marketplace inteligente premium.";
-    }
-
-    if (plan === "pro") {
-      return "Recibirás análisis avanzado con IA, recomendaciones priorizadas y acceso al marketplace inteligente.";
-    }
-
-    return "Al finalizar el quiz verás tu análisis base. Las recomendaciones avanzadas con IA y el marketplace inteligente están disponibles en los planes Pro y Premium.";
-  }, [plan, planLoading]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
-      <div className="mx-auto max-w-2xl rounded-2xl bg-white p-8 shadow-sm">
-        <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
-          VitaSmart AI · Quiz
-        </div>
-
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white">
-            Plan actual: {planLoading ? "Cargando..." : getPlanLabel(plan)}
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-2xl bg-white p-8 shadow-sm">
+          <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
+            VitaSmart AI · Quiz
           </div>
 
-          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
-            IA avanzada: {advancedAIEnabled ? "Activada" : "Bloqueada"}
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white">
+              Plan actual: {planLoading ? "Cargando..." : plan.toUpperCase()}
+            </div>
+
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
+              IA avanzada: {advancedAIEnabled ? "Activada" : "Bloqueada"}
+            </div>
+
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
+              Marketplace inteligente:{" "}
+              {smartMarketplaceEnabled ? "Activado" : "Bloqueado"}
+            </div>
           </div>
 
-          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
-            Marketplace inteligente:{" "}
-            {smartMarketplaceEnabled ? "Activado" : "Bloqueado"}
-          </div>
-        </div>
+          <h1 className="text-3xl font-bold text-slate-900">
+            Análisis personalizado
+          </h1>
 
-        <h1 className="text-3xl font-bold">Análisis personalizado</h1>
-        <p className="mt-2 text-slate-600">
-          Responde paso a paso para generar tus recomendaciones.
-        </p>
-
-        <div
-          className={`mt-6 rounded-2xl border p-4 ${
-            plan === "free"
-              ? "border-amber-200 bg-amber-50"
-              : "border-emerald-200 bg-emerald-50"
-          }`}
-        >
-          <div
-            className={`text-sm font-semibold ${
-              plan === "free" ? "text-amber-900" : "text-emerald-900"
-            }`}
-          >
-            {planSummaryTitle}
-          </div>
-
-          <p
-            className={`mt-2 text-sm leading-6 ${
-              plan === "free" ? "text-amber-800" : "text-emerald-800"
-            }`}
-          >
-            {planSummaryText}
+          <p className="mt-2 text-slate-600">
+            Responde paso a paso para generar una lectura inicial de tu perfil
+            y construir una base útil para tu evolución.
           </p>
 
-          {!planLoading && plan === "free" && (
-            <div className="mt-4">
-              <Link
-                href="/pricing"
-                className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-              >
-                Ver planes
-              </Link>
+          <div className="mt-6 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+            <div className="text-sm font-semibold text-slate-900">
+              Lectura rápida de tu experiencia actual
             </div>
-          )}
-        </div>
-
-        <div className="mt-6">
-          <div className="mb-2 flex items-center justify-between text-sm text-slate-500">
-            <span>
-              Paso {step} de {totalSteps}
-            </span>
-            <span>{Math.round(progress)}%</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-slate-200">
-            <div
-              className="h-2 rounded-full bg-slate-900 transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="mt-10">
-          {step === 1 && (
-            <StepCard
-              title="¿Cuál es tu edad?"
-              description="Esto nos ayuda a adaptar mejor las recomendaciones."
-            >
-              <input
-                type="number"
-                value={formData.age}
-                onChange={(e) =>
-                  setFormData({ ...formData, age: e.target.value })
-                }
-                placeholder="Ejemplo: 48"
-                className="w-full rounded-xl border border-slate-300 p-4 text-lg"
-              />
-            </StepCard>
-          )}
-
-          {step === 2 && (
-            <StepCard
-              title="¿Cuál es tu sexo?"
-              description="Algunas recomendaciones cambian según el perfil."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <OptionButton
-                  active={formData.sex === "male"}
-                  onClick={() => setFormData({ ...formData, sex: "male" })}
-                  label="Hombre"
-                />
-                <OptionButton
-                  active={formData.sex === "female"}
-                  onClick={() => setFormData({ ...formData, sex: "female" })}
-                  label="Mujer"
-                />
-              </div>
-            </StepCard>
-          )}
-
-          {step === 3 && (
-            <StepCard
-              title="¿Cómo está tu nivel de estrés?"
-              description="El estrés influye mucho en energía, sueño y concentración."
-            >
-              <div className="grid gap-3">
-                <OptionButton
-                  active={formData.stress === "low"}
-                  onClick={() => setFormData({ ...formData, stress: "low" })}
-                  label="Bajo"
-                />
-                <OptionButton
-                  active={formData.stress === "medium"}
-                  onClick={() => setFormData({ ...formData, stress: "medium" })}
-                  label="Medio"
-                />
-                <OptionButton
-                  active={formData.stress === "high"}
-                  onClick={() => setFormData({ ...formData, stress: "high" })}
-                  label="Alto"
-                />
-              </div>
-            </StepCard>
-          )}
-
-          {step === 4 && (
-            <StepCard
-              title="¿Cuántas horas duermes normalmente?"
-              description="El descanso es clave para rendimiento físico y mental."
-            >
-              <div className="grid gap-3">
-                <OptionButton
-                  active={formData.sleep === "5"}
-                  onClick={() => setFormData({ ...formData, sleep: "5" })}
-                  label="Menos de 5 horas"
-                />
-                <OptionButton
-                  active={formData.sleep === "6"}
-                  onClick={() => setFormData({ ...formData, sleep: "6" })}
-                  label="6 horas"
-                />
-                <OptionButton
-                  active={formData.sleep === "7"}
-                  onClick={() => setFormData({ ...formData, sleep: "7" })}
-                  label="7 horas"
-                />
-                <OptionButton
-                  active={formData.sleep === "8"}
-                  onClick={() => setFormData({ ...formData, sleep: "8" })}
-                  label="8 o más horas"
-                />
-              </div>
-            </StepCard>
-          )}
-
-          {step === 5 && (
-            <StepCard
-              title="¿Cuál es tu objetivo principal?"
-              description="Selecciona el resultado que más te interesa mejorar."
-            >
-              <div className="grid gap-3">
-                <OptionButton
-                  active={formData.goal === "energy"}
-                  onClick={() => setFormData({ ...formData, goal: "energy" })}
-                  label="Más energía"
-                />
-                <OptionButton
-                  active={formData.goal === "focus"}
-                  onClick={() => setFormData({ ...formData, goal: "focus" })}
-                  label="Mejor concentración"
-                />
-                <OptionButton
-                  active={formData.goal === "sleep"}
-                  onClick={() => setFormData({ ...formData, goal: "sleep" })}
-                  label="Dormir mejor"
-                />
-                <OptionButton
-                  active={formData.goal === "health"}
-                  onClick={() => setFormData({ ...formData, goal: "health" })}
-                  label="Salud general"
-                />
-              </div>
-            </StepCard>
-          )}
-        </div>
-
-        <div className="mt-10 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-sm font-semibold text-slate-900">
-            Lo que obtienes con tu plan actual
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <FeatureItem
-              title="Health Score"
-              enabled
-              description="Disponible para todos los planes."
-            />
-            <FeatureItem
-              title="Análisis base"
-              enabled
-              description="Resumen y factores principales."
-            />
-            <FeatureItem
-              title="Recomendaciones avanzadas"
-              enabled={advancedAIEnabled}
-              description={
-                advancedAIEnabled
-                  ? "Incluidas en tu plan."
-                  : "Disponibles en Pro y Premium."
-              }
-            />
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {quizNarrative}
+            </p>
           </div>
 
           {!planLoading && plan === "free" && (
-            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
-              <div className="text-sm font-semibold text-sky-900">
-                Mejora el resultado antes de continuar
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm font-semibold text-amber-900">
+                Estás usando el plan Free
               </div>
-              <p className="mt-2 text-sm text-sky-800">
-                Si actualizas ahora, este mismo quiz podrá generar un análisis
-                más profundo y recomendaciones avanzadas con IA.
+              <p className="mt-2 text-sm leading-6 text-amber-800">
+                Al finalizar verás tu análisis base. Las recomendaciones
+                avanzadas con IA y el marketplace inteligente están disponibles
+                en los planes Pro y Premium.
               </p>
 
-              <div className="mt-3">
+              <div className="mt-4">
                 <Link
                   href="/pricing"
-                  className="inline-flex rounded-xl border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-900 hover:bg-sky-100"
+                  className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
                 >
-                  Actualizar plan
+                  Ver planes
                 </Link>
               </div>
             </div>
           )}
+
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between text-sm text-slate-500">
+              <span>
+                Paso {step} de {totalSteps}
+              </span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+
+            <div className="h-2 w-full rounded-full bg-slate-200">
+              <div
+                className="h-2 rounded-full bg-slate-900 transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-10">
+            {step === 1 && (
+              <StepCard
+                title="¿Cuál es tu edad?"
+                description="Esto nos ayuda a adaptar mejor la lectura inicial de tu perfil."
+              >
+                <input
+                  type="number"
+                  value={formData.age}
+                  onChange={(e) =>
+                    setFormData({ ...formData, age: e.target.value })
+                  }
+                  placeholder="Ejemplo: 48"
+                  className="w-full rounded-xl border border-slate-300 p-4 text-lg"
+                />
+              </StepCard>
+            )}
+
+            {step === 2 && (
+              <StepCard
+                title="¿Cuál es tu sexo?"
+                description="Algunas recomendaciones y patrones de lectura cambian según el perfil."
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <OptionButton
+                    active={formData.sex === "male"}
+                    onClick={() => setFormData({ ...formData, sex: "male" })}
+                    label="Hombre"
+                  />
+                  <OptionButton
+                    active={formData.sex === "female"}
+                    onClick={() => setFormData({ ...formData, sex: "female" })}
+                    label="Mujer"
+                  />
+                </div>
+              </StepCard>
+            )}
+
+            {step === 3 && (
+              <StepCard
+                title="¿Cómo está tu nivel de estrés?"
+                description="El estrés influye mucho en energía, recuperación, sueño y concentración."
+              >
+                <div className="grid gap-3">
+                  <OptionButton
+                    active={formData.stress === "low"}
+                    onClick={() => setFormData({ ...formData, stress: "low" })}
+                    label="Bajo"
+                  />
+                  <OptionButton
+                    active={formData.stress === "medium"}
+                    onClick={() =>
+                      setFormData({ ...formData, stress: "medium" })
+                    }
+                    label="Medio"
+                  />
+                  <OptionButton
+                    active={formData.stress === "high"}
+                    onClick={() => setFormData({ ...formData, stress: "high" })}
+                    label="Alto"
+                  />
+                </div>
+              </StepCard>
+            )}
+
+            {step === 4 && (
+              <StepCard
+                title="¿Cuántas horas duermes normalmente?"
+                description="El descanso es una de las variables más importantes de toda la lectura."
+              >
+                <div className="grid gap-3">
+                  <OptionButton
+                    active={formData.sleep === "5"}
+                    onClick={() => setFormData({ ...formData, sleep: "5" })}
+                    label="Menos de 5 horas"
+                  />
+                  <OptionButton
+                    active={formData.sleep === "6"}
+                    onClick={() => setFormData({ ...formData, sleep: "6" })}
+                    label="6 horas"
+                  />
+                  <OptionButton
+                    active={formData.sleep === "7"}
+                    onClick={() => setFormData({ ...formData, sleep: "7" })}
+                    label="7 horas"
+                  />
+                  <OptionButton
+                    active={formData.sleep === "8"}
+                    onClick={() => setFormData({ ...formData, sleep: "8" })}
+                    label="8 o más horas"
+                  />
+                </div>
+              </StepCard>
+            )}
+
+            {step === 5 && (
+              <StepCard
+                title="¿Cuál es tu objetivo principal?"
+                description="Selecciona el resultado que más te interesa mejorar en este momento."
+              >
+                <div className="grid gap-3">
+                  <OptionButton
+                    active={formData.goal === "energy"}
+                    onClick={() => setFormData({ ...formData, goal: "energy" })}
+                    label="Más energía"
+                  />
+                  <OptionButton
+                    active={formData.goal === "focus"}
+                    onClick={() => setFormData({ ...formData, goal: "focus" })}
+                    label="Mejor concentración"
+                  />
+                  <OptionButton
+                    active={formData.goal === "sleep"}
+                    onClick={() => setFormData({ ...formData, goal: "sleep" })}
+                    label="Dormir mejor"
+                  />
+                  <OptionButton
+                    active={formData.goal === "health"}
+                    onClick={() => setFormData({ ...formData, goal: "health" })}
+                    label="Salud general"
+                  />
+                </div>
+              </StepCard>
+            )}
+          </div>
+
+          <div className="mt-10 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">
+              Lo que obtienes con tu plan actual
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <FeatureItem
+                title="Health Score"
+                enabled
+                description="Disponible para todos los planes."
+              />
+              <FeatureItem
+                title="Análisis base"
+                enabled
+                description="Resumen y factores principales."
+              />
+              <FeatureItem
+                title="Recomendaciones avanzadas"
+                enabled={advancedAIEnabled}
+                description={
+                  advancedAIEnabled
+                    ? "Incluidas en tu plan."
+                    : "Disponibles en Pro y Premium."
+                }
+              />
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={step === 1}
+              className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Atrás
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNext}
+              className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700"
+            >
+              {step === totalSteps ? "Ver resultados" : "Siguiente"}
+            </button>
+          </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-between">
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={step === 1}
-            className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Atrás
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNext}
-            className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700"
-          >
-            {step === totalSteps ? "Ver resultados" : "Siguiente"}
-          </button>
-        </div>
+        {!planLoading && plan !== "premium" && (
+          <section className="mt-8">
+            <UpgradePrompt currentPlan={plan} context="quiz" />
+          </section>
+        )}
       </div>
     </main>
   );

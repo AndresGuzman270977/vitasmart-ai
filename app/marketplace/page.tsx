@@ -10,11 +10,13 @@ import {
 } from "../lib/productRanking";
 import { supabase } from "../lib/supabase";
 import {
+  getPlanLabel,
   getPlanLimits,
   normalizePlan,
   type PlanType,
 } from "../lib/planLimits";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
+import UpgradePrompt from "../../components/UpgradePrompt";
 
 type CategoryFilter =
   | "all"
@@ -214,7 +216,19 @@ export default function MarketplacePage() {
     ? filteredProducts.slice(3)
     : filteredProducts;
 
-  const showUpgradeBlock = !smartMarketplaceEnabled;
+  const marketplaceNarrative = useMemo(() => {
+    if (premiumMarketplaceEnabled) {
+      return "Tu experiencia actual te permite explorar recomendaciones mejor priorizadas y una navegación más premium del catálogo.";
+    }
+
+    if (smartMarketplaceEnabled) {
+      return "Tu marketplace está usando señales de tu perfil para ayudarte a descubrir opciones con más intención.";
+    }
+
+    return "Ahora mismo estás viendo el catálogo general. El verdadero salto ocurre cuando el marketplace empieza a responder a tu perfil.";
+  }, [premiumMarketplaceEnabled, smartMarketplaceEnabled]);
+
+  const canShowUpgradePrompt = plan !== "premium";
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -226,7 +240,7 @@ export default function MarketplacePage() {
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className="inline-flex rounded-full bg-slate-900 px-4 py-1 text-sm font-semibold text-white">
-              Plan actual: {plan.toUpperCase()}
+              Plan actual: {getPlanLabel(plan)}
             </div>
 
             <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
@@ -243,9 +257,19 @@ export default function MarketplacePage() {
           </h1>
 
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-            Explora suplementos organizados por categoría, prioridad y afinidad
-            con tu perfil actual de salud.
+            Descubre suplementos por categoría, prioridad y afinidad con tu
+            perfil actual. Cuanto mejor te conoce la plataforma, más sentido
+            tiene el orden del catálogo.
           </p>
+
+          <div className="mt-6 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+            <div className="text-sm font-semibold text-slate-900">
+              Lectura rápida de tu experiencia actual
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {marketplaceNarrative}
+            </p>
+          </div>
 
           {smartMarketplaceEnabled && latestAssessment ? (
             <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
@@ -275,11 +299,11 @@ export default function MarketplacePage() {
             </div>
           )}
 
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
             <StatCard
               title="Productos"
               value={`${PRODUCTS.length}`}
-              subtitle="Catálogo inicial estructurado"
+              subtitle="Catálogo disponible"
             />
             <StatCard
               title="Categorías"
@@ -297,9 +321,14 @@ export default function MarketplacePage() {
               }
               subtitle={
                 smartMarketplaceEnabled
-                  ? "Ranking dinámico según el usuario"
-                  : "Catálogo visible sin personalización"
+                  ? "Orden con más contexto"
+                  : "Sin personalización por perfil"
               }
+            />
+            <StatCard
+              title="Experiencia"
+              value={premiumMarketplaceEnabled ? "Premium" : "Base"}
+              subtitle="Nivel actual del catálogo"
             />
           </div>
         </section>
@@ -372,10 +401,16 @@ export default function MarketplacePage() {
           <>
             {smartMarketplaceEnabled && (
               <section className="mt-8">
-                <div className="mb-6 flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    Top recomendados para ti
-                  </h2>
+                <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      Top recomendados para ti
+                    </h2>
+                    <p className="mt-2 text-slate-600">
+                      Esta selección busca poner primero lo que podría resultar
+                      más relevante para tu perfil actual.
+                    </p>
+                  </div>
 
                   <div className="text-sm text-slate-500">
                     {topRecommended.length} producto(s)
@@ -409,7 +444,7 @@ export default function MarketplacePage() {
               </section>
             )}
 
-            {showUpgradeBlock && (
+            {!smartMarketplaceEnabled && (
               <section className="mt-8">
                 <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm ring-1 ring-slate-200">
                   <h2 className="text-2xl font-bold text-slate-900">
@@ -420,6 +455,16 @@ export default function MarketplacePage() {
                     recomendaciones inteligentes según tu análisis están
                     disponibles en los planes Pro y Premium.
                   </p>
+
+                  <div className="mt-5 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Lo que desbloqueas al mejorar tu plan
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Un catálogo que deja de ser genérico y empieza a sentirse
+                      alineado con tu objetivo, tu estrés y tu descanso.
+                    </p>
+                  </div>
 
                   <div className="mt-5">
                     <Link
@@ -434,12 +479,18 @@ export default function MarketplacePage() {
             )}
 
             <section className="mt-12">
-              <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-900">
-                  {smartMarketplaceEnabled
-                    ? "Más suplementos del catálogo"
-                    : "Catálogo completo"}
-                </h2>
+              <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    {smartMarketplaceEnabled
+                      ? "Más suplementos del catálogo"
+                      : "Catálogo completo"}
+                  </h2>
+                  <p className="mt-2 text-slate-600">
+                    Sigue explorando opciones y compara cuál encaja mejor con lo
+                    que estás buscando.
+                  </p>
+                </div>
 
                 <div className="text-sm text-slate-500">
                   {remainingProducts.length} producto(s)
@@ -471,6 +522,12 @@ export default function MarketplacePage() {
                 </div>
               )}
             </section>
+
+            {canShowUpgradePrompt && (
+              <section className="mt-8">
+                <UpgradePrompt currentPlan={plan} context="marketplace" />
+              </section>
+            )}
           </>
         )}
       </div>
@@ -493,10 +550,10 @@ function ProductCard({
 }) {
   return (
     <div
-      className={`rounded-3xl p-6 shadow-sm ring-1 ${
+      className={`rounded-3xl p-6 shadow-sm ring-1 transition ${
         highlight
           ? "border border-blue-200 bg-white ring-blue-200"
-          : "bg-white ring-slate-200"
+          : "bg-white ring-slate-200 hover:bg-slate-50"
       }`}
     >
       <div className="flex items-center justify-between">
@@ -531,7 +588,7 @@ function ProductCard({
 
       <div className="mt-5 rounded-xl bg-slate-50 p-4">
         <div className="text-sm font-semibold text-slate-900">
-          ¿Por qué aparece arriba?
+          ¿Por qué aparece aquí?
         </div>
 
         {showReasons && product.reasons.length > 0 ? (

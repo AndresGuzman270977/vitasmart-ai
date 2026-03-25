@@ -45,7 +45,7 @@ export default function PricingPage() {
               </div>
 
               <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-                Planes para escalar tu salud preventiva con IA
+                Elige la experiencia que quieres vivir
               </h1>
 
               <p className="mt-5 text-lg leading-8 text-slate-600">
@@ -431,9 +431,7 @@ function PricingPageContent() {
       await loadProfileState();
     } catch (error: any) {
       console.error("Error gestionando suscripción:", error);
-      setMessage(
-        error?.message || "No se pudo gestionar la suscripción."
-      );
+      setMessage(error?.message || "No se pudo gestionar la suscripción.");
     } finally {
       setSubscriptionActionLoading(null);
     }
@@ -469,8 +467,7 @@ function PricingPageContent() {
       currentPlan === "premium" ||
       hasStripeCustomer);
 
-  const hasPaidPlan =
-    currentPlan === "pro" || currentPlan === "premium";
+  const hasPaidPlan = currentPlan === "pro" || currentPlan === "premium";
 
   const canSwitchToPro =
     hasPaidPlan &&
@@ -499,22 +496,30 @@ function PricingPageContent() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-6xl">
-        <section className="mx-auto max-w-3xl text-center">
+        <section className="mx-auto max-w-4xl text-center">
           <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
             VitaSmart AI · Pricing
           </div>
 
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            Planes para escalar tu salud preventiva con IA
+            Empieza gratis.
+            <span className="block">Escala cuando quieras más poder.</span>
           </h1>
 
-          <p className="mt-5 text-lg leading-8 text-slate-600">
-            Empieza gratis, guarda tu historial y evoluciona hacia una
-            experiencia más profunda con análisis, seguimiento y
-            recomendaciones inteligentes.
+          <p className="mx-auto mt-5 max-w-3xl text-lg leading-8 text-slate-600">
+            Free te permite descubrir la plataforma. Pro convierte la experiencia
+            en seguimiento real. Premium desbloquea la versión más completa,
+            profunda y personalizada de VitaSmart AI.
           </p>
 
-          <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Pill text="Empiezas en minutos" />
+            <Pill text="Free útil desde el día uno" />
+            <Pill text="Pro = más valor real" />
+            <Pill text="Premium = máxima profundidad" />
+          </div>
+
+          <div className="mt-8 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
             {loading ? (
               <span className="text-slate-600">Cargando tu plan actual...</span>
             ) : currentPlan ? (
@@ -562,9 +567,7 @@ function PricingPageContent() {
               {canSwitchToPro && (
                 <button
                   type="button"
-                  onClick={() =>
-                    handleSubscriptionAction("switch_plan", "pro")
-                  }
+                  onClick={() => handleSubscriptionAction("switch_plan", "pro")}
                   disabled={subscriptionActionLoading !== null}
                   className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
@@ -625,22 +628,21 @@ function PricingPageContent() {
             badge="Starter"
             title="Free"
             price="$0"
-            subtitle="Ideal para descubrir la plataforma"
+            subtitle="Perfecto para descubrir el valor de la plataforma"
+            emotionalLine="Empieza sin barreras y entiende tu punto de partida."
             features={[
               `Hasta ${
                 Number.isFinite(freeLimits.historyLimit)
                   ? freeLimits.historyLimit
                   : "∞"
               } análisis guardados`,
-              "Health Score básico",
-              "Análisis base con resumen y factores",
-              "Acceso al quiz",
+              "Health Score",
+              "Análisis base",
               "Marketplace general",
-              freeLimits.advancedAI
-                ? "IA avanzada incluida"
-                : "IA avanzada bloqueada",
+              "Ideal para probar y empezar",
             ]}
-            ctaLabel={currentPlan === "free" ? "Plan actual" : "Plan base"}
+            ctaLabel={currentPlan === "free" ? "Plan actual" : "Empezar gratis"}
+            secondaryLabel="Útil desde el primer día"
             onSelect={() => handleCheckout("free")}
             disabled={changingPlan !== null || currentPlan === "free"}
             highlighted={false}
@@ -652,7 +654,8 @@ function PricingPageContent() {
             title="Pro"
             price="$9"
             period="/mes"
-            subtitle="Para usuarios que quieren seguimiento real"
+            subtitle="La opción que convierte curiosidad en seguimiento real"
+            emotionalLine="Aquí es donde VitaSmart AI se vuelve mucho más poderosa."
             features={[
               `Hasta ${
                 Number.isFinite(proLimits.historyLimit)
@@ -662,8 +665,7 @@ function PricingPageContent() {
               "IA avanzada desbloqueada",
               "Recomendaciones priorizadas",
               "Marketplace inteligente",
-              "Historial extendido",
-              "Dashboard y experiencia más profunda",
+              "Experiencia mucho más útil y profunda",
             ]}
             ctaLabel={
               changingPlan === "pro"
@@ -672,13 +674,12 @@ function PricingPageContent() {
                 ? "Plan actual"
                 : hasPaidPlan
                 ? "Cambiar desde controles superiores"
-                : "Suscribirme a Pro"
+                : "Quiero Pro"
             }
+            secondaryLabel="Mejor equilibrio entre precio y valor"
             onSelect={() => handleCheckout("pro")}
             disabled={
-              changingPlan !== null ||
-              currentPlan === "pro" ||
-              hasPaidPlan
+              changingPlan !== null || currentPlan === "pro" || hasPaidPlan
             }
             highlighted={true}
             current={currentPlan === "pro"}
@@ -689,14 +690,14 @@ function PricingPageContent() {
             title="Premium"
             price="$19"
             period="/mes"
-            subtitle="Para usuarios de optimización avanzada"
+            subtitle="La versión más completa de toda la experiencia"
+            emotionalLine="Pensado para usuarios que quieren máximo control y profundidad."
             features={[
               "Análisis ilimitados",
               "Todo lo incluido en Pro",
-              "Bundles premium del marketplace",
+              "Marketplace premium",
               "Mayor personalización",
-              "Experiencia avanzada por plan",
-              "Base para futuras integraciones premium",
+              "Base para la experiencia más avanzada",
             ]}
             ctaLabel={
               changingPlan === "premium"
@@ -705,8 +706,9 @@ function PricingPageContent() {
                 ? "Plan actual"
                 : hasPaidPlan
                 ? "Cambiar desde controles superiores"
-                : "Suscribirme a Premium"
+                : "Quiero Premium"
             }
+            secondaryLabel="Máximo valor para usuarios intensivos"
             onSelect={() => handleCheckout("premium")}
             disabled={
               changingPlan !== null ||
@@ -718,31 +720,56 @@ function PricingPageContent() {
           />
         </section>
 
+        <section className="mt-20 grid gap-6 lg:grid-cols-2">
+          <BenefitPanel
+            title="Por qué muchos terminan en Pro"
+            description="Pro elimina la sensación de estar usando solo una muestra de la plataforma. Desbloquea profundidad, continuidad y una experiencia que ya se siente verdaderamente inteligente."
+            items={[
+              "IA avanzada para análisis más ricos",
+              "Recomendaciones priorizadas por perfil",
+              "Historial mucho más amplio",
+              "Marketplace inteligente según el usuario",
+            ]}
+            dark={false}
+          />
+
+          <BenefitPanel
+            title="Por qué Premium se siente aspiracional"
+            description="Premium no es solo una mejora incremental. Es la sensación de tener la versión más completa, más pulida y más profunda del sistema VitaSmart AI."
+            items={[
+              "Análisis ilimitados",
+              "Mayor continuidad en el seguimiento",
+              "Experiencia premium en marketplace",
+              "Máxima profundidad disponible en la app",
+            ]}
+            dark={true}
+          />
+        </section>
+
         <section className="mt-20 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 sm:p-12">
           <div className="grid gap-10 lg:grid-cols-2">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">
-                ¿Qué incluye la visión de largo plazo?
+                ¿Cómo elegir tu plan?
               </h2>
               <p className="mt-4 leading-7 text-slate-600">
-                VitaSmart AI evolucionará desde una herramienta de análisis hacia
-                una plataforma de salud preventiva con seguimiento continuo,
-                recomendaciones inteligentes y experiencias premium.
+                La mejor decisión depende de qué tan en serio quieres convertir
+                esta app en una herramienta continua de mejora personal.
               </p>
             </div>
 
             <div className="grid gap-4">
               <FeatureRow
-                title="Historial de salud"
-                description="Visualiza la evolución de tu score y tus análisis en el tiempo."
+                title="Free"
+                description="Para entrar, probar, entender tu perfil y empezar sin fricción."
               />
               <FeatureRow
-                title="Dashboard personalizado"
-                description="Consulta rápidamente tu estado actual, tendencias y prioridades."
+                title="Pro"
+                description="Para usuarios que ya quieren una experiencia más profunda y accionable."
               />
               <FeatureRow
-                title="IA aplicada a prevención"
-                description="Recibe interpretación clara y accionable de tu perfil de bienestar."
+                title="Premium"
+                description="Para quienes quieren la versión más completa y avanzada de la plataforma."
               />
             </div>
           </div>
@@ -810,8 +837,8 @@ function PricingPageContent() {
             Empieza hoy con tu primer análisis
           </h2>
           <p className="mt-3 text-slate-600">
-            Construye tu perfil, guarda tu historial y descubre cómo podría
-            evolucionar tu salud con una plataforma inteligente.
+            Entra gratis, siente el valor inicial y escala cuando quieras una
+            experiencia mucho más profunda.
           </p>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -835,14 +862,24 @@ function PricingPageContent() {
   );
 }
 
+function Pill({ text }: { text: string }) {
+  return (
+    <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+      {text}
+    </div>
+  );
+}
+
 function PricingCard({
   badge,
   title,
   price,
   period,
   subtitle,
+  emotionalLine,
   features,
   ctaLabel,
+  secondaryLabel,
   onSelect,
   disabled,
   highlighted,
@@ -853,8 +890,10 @@ function PricingCard({
   price: string;
   period?: string;
   subtitle: string;
+  emotionalLine: string;
   features: string[];
   ctaLabel: string;
+  secondaryLabel: string;
   onSelect: () => void;
   disabled: boolean;
   highlighted: boolean;
@@ -915,6 +954,16 @@ function PricingCard({
         {subtitle}
       </p>
 
+      <div
+        className={`mt-4 rounded-2xl p-4 text-sm ${
+          highlighted
+            ? "bg-white/5 text-slate-200 ring-1 ring-white/10"
+            : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
+        }`}
+      >
+        {emotionalLine}
+      </div>
+
       <ul className="mt-8 space-y-3">
         {features.map((feature, index) => (
           <li
@@ -941,6 +990,54 @@ function PricingCard({
       >
         {ctaLabel}
       </button>
+
+      <div
+        className={`mt-3 text-center text-xs ${
+          highlighted ? "text-slate-300" : "text-slate-500"
+        }`}
+      >
+        {secondaryLabel}
+      </div>
+    </div>
+  );
+}
+
+function BenefitPanel({
+  title,
+  description,
+  items,
+  dark,
+}: {
+  title: string;
+  description: string;
+  items: string[];
+  dark: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-3xl p-8 shadow-sm ${
+        dark ? "bg-slate-900 text-white" : "bg-white ring-1 ring-slate-200"
+      }`}
+    >
+      <h2 className="text-2xl font-bold">{title}</h2>
+      <p className={`mt-4 leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>
+        {description}
+      </p>
+
+      <div className="mt-6 grid gap-3">
+        {items.map((item, index) => (
+          <div
+            key={index}
+            className={`rounded-2xl p-4 ${
+              dark
+                ? "bg-white/5 text-slate-200 ring-1 ring-white/10"
+                : "bg-slate-50 text-slate-700 ring-1 ring-slate-200"
+            }`}
+          >
+            {item}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

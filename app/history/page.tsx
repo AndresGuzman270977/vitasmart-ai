@@ -10,6 +10,7 @@ import {
   normalizePlan,
   type UserPlan,
 } from "../lib/planLimits";
+import UpgradePrompt from "../../components/UpgradePrompt";
 import {
   LineChart,
   Line,
@@ -148,8 +149,35 @@ export default function HistoryPage() {
       ? latestScore - previousScore
       : null;
 
-  const isHistoryLimited =
-    Number.isFinite(planLimit) && allItemsCount > planLimit;
+  const averageScore = useMemo(() => {
+    if (items.length === 0) return null;
+    const total = items.reduce((acc, item) => acc + Number(item.score || 0), 0);
+    return Math.round(total / items.length);
+  }, [items]);
+
+  const progressNarrative = useMemo(() => {
+    if (items.length === 0) {
+      return "Todavía no has empezado a construir una línea de evolución.";
+    }
+
+    if (items.length === 1) {
+      return "Ya tienes tu primer punto de referencia. El verdadero valor crecerá cuando acumules más análisis.";
+    }
+
+    if (scoreDelta === null) {
+      return "Tu historial ya empieza a mostrar una base útil de seguimiento.";
+    }
+
+    if (scoreDelta > 0) {
+      return "Tu resultado más reciente mejoró frente al anterior. Hay señales positivas de progreso.";
+    }
+
+    if (scoreDelta < 0) {
+      return "Tu último resultado bajó frente al anterior. Esto puede ayudarte a detectar cambios y ajustar hábitos a tiempo.";
+    }
+
+    return "Tu resultado se mantiene estable. Eso también aporta claridad para seguir observando tendencias.";
+  }, [items.length, scoreDelta]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -160,11 +188,12 @@ export default function HistoryPage() {
           </div>
 
           <h1 className="text-3xl font-bold text-slate-900">
-            Health History
+            Tu evolución de salud
           </h1>
 
           <p className="mt-3 text-slate-600">
-            Aquí puedes ver los análisis de salud guardados en tu cuenta.
+            Aquí puedes ver tus análisis guardados, detectar cambios y construir
+            una visión más clara de tu progreso con el tiempo.
           </p>
 
           {!needsLogin && (
@@ -177,6 +206,17 @@ export default function HistoryPage() {
                 Límite visible:{" "}
                 {Number.isFinite(planLimit) ? planLimit : "Ilimitado"}
               </span>
+            </div>
+          )}
+
+          {!needsLogin && (
+            <div className="mt-6 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+              <div className="text-sm font-semibold text-slate-900">
+                Lectura rápida de tu historial
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {progressNarrative}
+              </p>
             </div>
           )}
 
@@ -232,42 +272,54 @@ export default function HistoryPage() {
           </div>
         ) : (
           <>
-            <div className="mt-8 grid gap-6 md:grid-cols-3">
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <div className="text-sm text-slate-500">Último score</div>
-                <div className="mt-2 text-4xl font-bold text-slate-900">
-                  {latestScore ?? "-"}
-                </div>
-              </div>
+            <div className="mt-8 grid gap-6 md:grid-cols-4">
+              <MetricCard
+                title="Último score"
+                value={latestScore !== null ? `${latestScore}` : "-"}
+                subtitle="Tu resultado más reciente"
+              />
 
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <div className="text-sm text-slate-500">Cambio reciente</div>
-                <div className="mt-2 text-4xl font-bold text-slate-900">
-                  {scoreDelta === null
+              <MetricCard
+                title="Cambio reciente"
+                value={
+                  scoreDelta === null
                     ? "-"
                     : scoreDelta > 0
                     ? `+${scoreDelta}`
-                    : scoreDelta}
-                </div>
-              </div>
+                    : `${scoreDelta}`
+                }
+                subtitle="Comparado con el análisis anterior"
+              />
 
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <div className="text-sm text-slate-500">Análisis visibles</div>
-                <div className="mt-2 text-4xl font-bold text-slate-900">
-                  {items.length}
-                </div>
-                {allItemsCount > items.length && (
-                  <div className="mt-2 text-xs text-slate-500">
-                    de {allItemsCount} totales
-                  </div>
-                )}
-              </div>
+              <MetricCard
+                title="Promedio visible"
+                value={averageScore !== null ? `${averageScore}` : "-"}
+                subtitle="Promedio de tus análisis visibles"
+              />
+
+              <MetricCard
+                title="Análisis visibles"
+                value={`${items.length}`}
+                subtitle={
+                  allItemsCount > items.length
+                    ? `de ${allItemsCount} totales`
+                    : "Registros en pantalla"
+                }
+              />
             </div>
 
             <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-900">
-                Evolución del Health Score
-              </h2>
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    Evolución del Health Score
+                  </h2>
+                  <p className="mt-2 text-slate-600">
+                    El valor del historial no está solo en guardar datos, sino
+                    en observar tendencias.
+                  </p>
+                </div>
+              </div>
 
               {chartData.length === 0 ? (
                 <p className="mt-4 text-slate-600">
@@ -294,6 +346,27 @@ export default function HistoryPage() {
               )}
             </div>
 
+            <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-semibold text-slate-900">
+                Por qué este historial importa
+              </h2>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <InsightCard
+                  title="Referencia"
+                  description="Te da un punto de comparación real sobre tu evolución."
+                />
+                <InsightCard
+                  title="Claridad"
+                  description="Te ayuda a detectar si estás mejorando, estable o bajando."
+                />
+                <InsightCard
+                  title="Continuidad"
+                  description="Cada nuevo análisis aumenta el valor del sistema para ti."
+                />
+              </div>
+            </div>
+
             <div className="mt-8">
               {items.length === 0 ? (
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
@@ -306,24 +379,30 @@ export default function HistoryPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {items.map((item) => (
+                  {items.map((item, index) => (
                     <div
                       key={item.id}
                       className="rounded-2xl bg-white p-6 shadow-sm"
                     >
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div>
-                          <div className="text-sm text-slate-500">
-                            {formatDate(item.created_at)}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-sm text-slate-500">
+                              {formatDate(item.created_at)}
+                            </div>
+
+                            {index === 0 && (
+                              <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+                                Más reciente
+                              </span>
+                            )}
                           </div>
 
-                          <h2 className="mt-1 text-xl font-semibold text-slate-900">
+                          <h2 className="mt-2 text-xl font-semibold text-slate-900">
                             Score {item.score}/100
                           </h2>
 
-                          <p className="mt-2 text-slate-600">
-                            {item.summary}
-                          </p>
+                          <p className="mt-2 text-slate-600">{item.summary}</p>
 
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Badge label={`Edad: ${item.age}`} />
@@ -346,9 +425,9 @@ export default function HistoryPage() {
 
                             <div className="mt-2 flex flex-wrap gap-2">
                               {Array.isArray(item.factors) &&
-                                item.factors.map((factor, index) => (
+                                item.factors.map((factor, factorIndex) => (
                                   <span
-                                    key={index}
+                                    key={factorIndex}
                                     className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
                                   >
                                     {factor}
@@ -373,30 +452,48 @@ export default function HistoryPage() {
               )}
             </div>
 
-            {plan === "free" && isHistoryLimited && (
-              <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-6">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Desbloquea todo tu historial
-                </h2>
-
-                <p className="mt-2 text-sm text-slate-700">
-                  Estás viendo solo los primeros {planLimit} análisis de un
-                  total de {allItemsCount}. Actualiza a Pro o Premium para ver
-                  más.
-                </p>
-
-                <Link
-                  href="/pricing"
-                  className="mt-4 inline-block rounded-lg bg-black px-4 py-2 text-white"
-                >
-                  Ver planes
-                </Link>
+            {plan !== "premium" && (
+              <div className="mt-8">
+                <UpgradePrompt currentPlan={plan} context="history" />
               </div>
             )}
           </>
         )}
       </div>
     </main>
+  );
+}
+
+function MetricCard({
+  title,
+  value,
+  subtitle,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="text-sm text-slate-500">{title}</div>
+      <div className="mt-2 text-4xl font-bold text-slate-900">{value}</div>
+      <div className="mt-3 text-sm text-slate-600">{subtitle}</div>
+    </div>
+  );
+}
+
+function InsightCard({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <div className="text-lg font-semibold text-slate-900">{title}</div>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+    </div>
   );
 }
 
