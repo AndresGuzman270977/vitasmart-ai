@@ -57,32 +57,35 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!user.email) {
-      return NextResponse.json(
-        { error: "Tu usuario no tiene email válido para Stripe Portal." },
-        { status: 400 }
-      );
-    }
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("stripe_customer_id, stripe_subscription_id, subscription_status")
+      .eq("id", user.id)
+      .single();
 
-    const customers = await stripe.customers.list({
-      email: user.email,
-      limit: 1,
-    });
-
-    const customer = customers.data[0];
-
-    if (!customer) {
+    if (profileError) {
       return NextResponse.json(
         {
           error:
-            "No se encontró un cliente de Stripe para este email. Primero activa un plan de pago.",
+            profileError.message ||
+            "No se pudo cargar el perfil del usuario.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!profile?.stripe_customer_id) {
+      return NextResponse.json(
+        {
+          error:
+            "No tienes un cliente de Stripe asociado. Activa primero un plan.",
         },
         { status: 404 }
       );
     }
 
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: customer.id,
+      customer: profile.stripe_customer_id,
       return_url: `${getBaseUrl()}/pricing`,
     });
 
