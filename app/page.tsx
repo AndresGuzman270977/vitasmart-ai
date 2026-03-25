@@ -1,9 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./lib/supabase";
+import {
+  getPlanLabel,
+  getPlanLimits,
+  normalizePlan,
+  type UserPlan,
+} from "./lib/planLimits";
+
+type HomeProfile = {
+  plan?: UserPlan | string | null;
+  subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
+};
 
 export default function HomePage() {
   const router = useRouter();
@@ -11,9 +23,40 @@ export default function HomePage() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [currentPlan, setCurrentPlan] = useState<UserPlan>("free");
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+    null
+  );
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
 
   useEffect(() => {
     let ignore = false;
+
+    async function loadProfileSafe(userId: string) {
+      try {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("plan, subscription_status, cancel_at_period_end")
+          .eq("id", userId)
+          .maybeSingle();
+
+        const typedProfile = profile as HomeProfile | null;
+
+        if (!ignore) {
+          setCurrentPlan(normalizePlan(typedProfile?.plan));
+          setSubscriptionStatus(typedProfile?.subscription_status ?? null);
+          setCancelAtPeriodEnd(Boolean(typedProfile?.cancel_at_period_end));
+        }
+      } catch (error) {
+        console.error("Error cargando perfil home:", error);
+
+        if (!ignore) {
+          setCurrentPlan("free");
+          setSubscriptionStatus(null);
+          setCancelAtPeriodEnd(false);
+        }
+      }
+    }
 
     async function checkSession() {
       try {
@@ -35,12 +78,16 @@ export default function HomePage() {
 
         if (user) {
           setHasSession(true);
+          await loadProfileSafe(user.id);
           setCheckingSession(false);
           router.replace("/dashboard");
           return;
         }
 
         setHasSession(false);
+        setCurrentPlan("free");
+        setSubscriptionStatus(null);
+        setCancelAtPeriodEnd(false);
       } catch (error: any) {
         console.error("Error verificando sesión:", error);
 
@@ -49,6 +96,9 @@ export default function HomePage() {
           setAuthError(
             error?.message || "No se pudo verificar la sesión actual."
           );
+          setCurrentPlan("free");
+          setSubscriptionStatus(null);
+          setCancelAtPeriodEnd(false);
         }
       } finally {
         if (!ignore) {
@@ -59,10 +109,57 @@ export default function HomePage() {
 
     checkSession();
 
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (ignore) return;
+
+      setTimeout(async () => {
+        if (ignore) return;
+
+        if (session?.user) {
+          setHasSession(true);
+          await loadProfileSafe(session.user.id);
+          setCheckingSession(false);
+          router.replace("/dashboard");
+        } else {
+          setHasSession(false);
+          setCurrentPlan("free");
+          setSubscriptionStatus(null);
+          setCancelAtPeriodEnd(false);
+          setCheckingSession(false);
+        }
+      }, 0);
+    });
+
     return () => {
       ignore = true;
+      subscription.unsubscribe();
     };
   }, [router]);
+
+  const freeLimits = useMemo(() => getPlanLimits("free"), []);
+  const proLimits = useMemo(() => getPlanLimits("pro"), []);
+  const premiumLimits = useMemo(() => getPlanLimits("premium"), []);
+
+  const subscriptionStatusLabel = useMemo(() => {
+    if (!subscriptionStatus) return "Sin suscripción activa";
+
+    if (subscriptionStatus === "active") {
+      return cancelAtPeriodEnd
+        ? "Activa · cancelación programada"
+        : "Activa";
+    }
+
+    if (subscriptionStatus === "trialing") return "En prueba";
+    if (subscriptionStatus === "past_due") return "Pago pendiente";
+    if (subscriptionStatus === "payment_failed") return "Pago fallido";
+    if (subscriptionStatus === "canceled") return "Cancelada";
+    if (subscriptionStatus === "checkout_completed")
+      return "Procesando activación";
+
+    return subscriptionStatus;
+  }, [subscriptionStatus, cancelAtPeriodEnd]);
 
   if (checkingSession) {
     return (
@@ -111,58 +208,119 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <section className="mx-auto max-w-6xl px-6 py-20">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
-            Preventive Health Intelligence
-          </div>
+      <section className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
+        <div className="grid items-center gap-10 lg:grid-cols-2">
+          <div>
+            <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
+              Preventive Health Intelligence
+            </div>
 
-          <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
-            Tu plataforma inteligente de salud preventiva
-          </h1>
+            <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
+              Entiende tu salud.
+              <span className="block">Mejora tus hábitos.</span>
+              <span className="block">Desbloquea tu mejor versión.</span>
+            </h1>
 
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            Analiza tu perfil, obtén un Health Score, descubre prioridades de
-            bienestar y recibe recomendaciones personalizadas de suplementos y
-            hábitos con apoyo de inteligencia artificial.
-          </p>
-
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/quiz"
-              className="rounded-xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-slate-700"
-            >
-              Comenzar análisis
-            </Link>
-
-            <Link
-              href="/history"
-              className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Ver historial
-            </Link>
-          </div>
-
-          {authError && (
-            <p className="mx-auto mt-6 max-w-2xl text-sm text-red-600">
-              {authError}
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+              VitaSmart AI convierte tu perfil actual en un sistema de mejora
+              continua: Health Score, análisis inteligente, historial,
+              recomendaciones personalizadas y una experiencia premium diseñada
+              para ayudarte a progresar de verdad.
             </p>
-          )}
-        </div>
 
-        <div className="mt-20 grid gap-6 md:grid-cols-3">
-          <FeatureCard
-            title="Health Score"
-            description="Obtén una puntuación orientativa de bienestar basada en tu perfil actual, con factores clave que influyen en tu estado general."
-          />
-          <FeatureCard
-            title="Análisis inteligente"
-            description="La plataforma interpreta sueño, estrés, edad y objetivos para generar una lectura clara y accionable de tu situación."
-          />
-          <FeatureCard
-            title="Seguimiento continuo"
-            description="Guarda tus análisis en el tiempo y observa la evolución de tu score, tendencias y cambios en tu bienestar."
-          />
+            <div className="mt-8 flex flex-wrap gap-3">
+              <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                Free para empezar hoy
+              </div>
+              <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                Pro para seguimiento real
+              </div>
+              <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+                Premium para máximo control
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+              <Link
+                href="/quiz"
+                className="rounded-xl bg-slate-900 px-6 py-3 text-center text-base font-semibold text-white transition hover:bg-slate-700"
+              >
+                Empezar gratis ahora
+              </Link>
+
+              <Link
+                href="/pricing"
+                className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-center text-base font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Ver planes y beneficios
+              </Link>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-500">
+              Sin complicaciones. Empiezas en minutos.
+            </p>
+
+            {authError && (
+              <p className="mt-6 max-w-2xl text-sm text-red-600">
+                {authError}
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-4">
+            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Vista rápida
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <HeroStat
+                  label="Health Score"
+                  value="72"
+                  note="Ejemplo realista"
+                />
+                <HeroStat
+                  label="Modo IA"
+                  value="Pro"
+                  note="Más profundidad"
+                />
+                <HeroStat
+                  label="Historial"
+                  value="50+"
+                  note="Seguimiento real"
+                />
+              </div>
+              <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Lo que hace diferente a VitaSmart AI
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  No es solo un test. Es una experiencia que te ayuda a entender
+                  tu estado actual, detectar patrones y tomar mejores decisiones
+                  con continuidad.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-sm">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+                Por qué la gente sube de plan
+              </div>
+              <div className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+                <p>
+                  <strong className="text-white">Free</strong> permite descubrir
+                  la plataforma.
+                </p>
+                <p>
+                  <strong className="text-white">Pro</strong> convierte la
+                  experiencia en seguimiento real con IA avanzada y recomendaciones priorizadas.
+                </p>
+                <p>
+                  <strong className="text-white">Premium</strong> desbloquea la
+                  versión más completa, profunda y personalizada de la app.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -170,30 +328,155 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Cómo funciona VitaSmart AI
+              Empieza gratis. Siente el valor. Mejora cuando quieras escalar.
             </h2>
             <p className="mt-4 text-slate-600">
-              Un flujo simple, rápido y pensado para generar valor real desde el
-              primer análisis.
+              La estructura de VitaSmart AI está pensada para que el usuario
+              gane claridad desde el primer análisis y quiera avanzar hacia una
+              experiencia más profunda.
             </p>
           </div>
 
           <div className="mt-14 grid gap-6 md:grid-cols-3">
             <StepCard
               step="01"
-              title="Responde el assessment"
-              description="Completa el cuestionario sobre edad, estrés, sueño y objetivo principal de salud."
+              title="Descubre tu punto de partida"
+              description="Completa tu assessment y recibe un Health Score con lectura inicial de tu perfil."
             />
             <StepCard
               step="02"
-              title="Recibe tu análisis"
-              description="La IA genera un score, interpreta tu perfil y resume tus prioridades de bienestar."
+              title="Identifica patrones y prioridades"
+              description="Comprende cómo sueño, estrés, edad y objetivo impactan tu bienestar actual."
             />
             <StepCard
               step="03"
-              title="Actúa y da seguimiento"
-              description="Consulta recomendaciones, guarda tus resultados y revisa tu evolución en el tiempo."
+              title="Escala a una experiencia superior"
+              description="Activa Pro o Premium para desbloquear análisis más profundos, historial ampliado y recomendaciones más inteligentes."
             />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
+            Comparación clara
+          </div>
+
+          <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+            Elige la profundidad de experiencia que quieres vivir
+          </h2>
+
+          <p className="mt-4 text-slate-600">
+            Diseñado para que Free sea útil, Pro sea convincente y Premium sea
+            deseable.
+          </p>
+        </div>
+
+        <div className="mt-14 grid gap-6 lg:grid-cols-3">
+          <PlanCard
+            badge="Starter"
+            title="Free"
+            price="$0"
+            subtitle="La mejor forma de empezar"
+            features={[
+              `Hasta ${
+                Number.isFinite(freeLimits.historyLimit)
+                  ? freeLimits.historyLimit
+                  : "∞"
+              } análisis guardados`,
+              "Health Score",
+              "Análisis base",
+              "Marketplace general",
+              "Ideal para probar la plataforma",
+            ]}
+            ctaHref="/quiz"
+            ctaLabel="Empezar gratis"
+            current={false}
+            highlighted={false}
+          />
+
+          <PlanCard
+            badge="Más popular"
+            title="Pro"
+            price="$9"
+            period="/mes"
+            subtitle="Donde la plataforma realmente cobra vida"
+            features={[
+              `Hasta ${
+                Number.isFinite(proLimits.historyLimit)
+                  ? proLimits.historyLimit
+                  : "∞"
+              } análisis guardados`,
+              "IA avanzada",
+              "Recomendaciones priorizadas",
+              "Marketplace inteligente",
+              "Seguimiento más serio y útil",
+            ]}
+            ctaHref="/pricing"
+            ctaLabel="Quiero Pro"
+            current={currentPlan === "pro"}
+            highlighted={true}
+          />
+
+          <PlanCard
+            badge="Advanced"
+            title="Premium"
+            price="$19"
+            period="/mes"
+            subtitle="La experiencia más completa de VitaSmart AI"
+            features={[
+              "Análisis ilimitados",
+              "Todo lo de Pro",
+              "Marketplace premium",
+              "Mayor personalización",
+              "Máximo control y profundidad",
+            ]}
+            ctaHref="/pricing"
+            ctaLabel="Quiero Premium"
+            current={currentPlan === "premium"}
+            highlighted={false}
+          />
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="rounded-3xl bg-slate-50 p-8 ring-1 ring-slate-200">
+              <h2 className="text-2xl font-bold text-slate-900">
+                Lo que desbloquea Pro
+              </h2>
+              <p className="mt-4 leading-7 text-slate-600">
+                Pro está diseñado para usuarios que ya entendieron el valor del
+                análisis inicial y quieren una experiencia de salud preventiva
+                más útil, accionable y continua.
+              </p>
+
+              <div className="mt-6 grid gap-3">
+                <ValueRow text="IA avanzada para enriquecer el análisis" />
+                <ValueRow text="Recomendaciones priorizadas por perfil" />
+                <ValueRow text="Historial extendido para seguimiento real" />
+                <ValueRow text="Marketplace inteligente según el usuario" />
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-slate-900 p-8 text-white shadow-sm">
+              <h2 className="text-2xl font-bold">
+                Lo que hace irresistible a Premium
+              </h2>
+              <p className="mt-4 leading-7 text-slate-300">
+                Premium no es solo “más”. Es la versión más completa, refinada y
+                personalizada del sistema VitaSmart AI.
+              </p>
+
+              <div className="mt-6 grid gap-3">
+                <ValueRowDark text="Análisis ilimitados" />
+                <ValueRowDark text="Mayor profundidad y continuidad" />
+                <ValueRowDark text="Experiencia más premium en marketplace" />
+                <ValueRowDark text="Base ideal para futuras funciones exclusivas" />
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -202,27 +485,39 @@ export default function HomePage() {
         <div className="rounded-3xl bg-slate-900 px-8 py-12 text-white shadow-sm sm:px-12">
           <div className="max-w-3xl">
             <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">
-              Próximo nivel
+              Empieza hoy
             </div>
 
             <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              Convierte tus análisis en un sistema de mejora continua
+              El mejor momento para conocer tu punto de partida es ahora
             </h2>
 
             <p className="mt-4 text-slate-300">
-              VitaSmart AI no es solo un test. Es la base de una plataforma de
-              salud preventiva con historial, tendencias, recomendaciones
-              inteligentes y evolución del usuario.
+              Entra gratis, descubre tu perfil actual y decide si quieres
+              quedarte en lo básico o pasar a una experiencia mucho más poderosa.
             </p>
 
-            <div className="mt-8">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/quiz"
                 className="inline-flex rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-slate-100"
               >
                 Hacer mi análisis ahora
               </Link>
+
+              <Link
+                href="/pricing"
+                className="inline-flex rounded-xl border border-white/20 px-6 py-3 font-semibold text-white transition hover:bg-white/10"
+              >
+                Comparar planes
+              </Link>
             </div>
+
+            {subscriptionStatus && (
+              <p className="mt-5 text-sm text-slate-400">
+                Estado actual detectado: {subscriptionStatusLabel}.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -230,17 +525,20 @@ export default function HomePage() {
   );
 }
 
-function FeatureCard({
-  title,
-  description,
+function HeroStat({
+  label,
+  value,
+  note,
 }: {
-  title: string;
-  description: string;
+  label: string;
+  value: string;
+  note: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
-      <p className="mt-3 leading-7 text-slate-600">{description}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="text-sm text-slate-500">{label}</div>
+      <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
+      <div className="mt-1 text-sm text-slate-600">{note}</div>
     </div>
   );
 }
@@ -261,6 +559,128 @@ function StepCard({
       </div>
       <h3 className="mt-3 text-xl font-semibold text-slate-900">{title}</h3>
       <p className="mt-3 leading-7 text-slate-600">{description}</p>
+    </div>
+  );
+}
+
+function PlanCard({
+  badge,
+  title,
+  price,
+  period,
+  subtitle,
+  features,
+  ctaHref,
+  ctaLabel,
+  current,
+  highlighted,
+}: {
+  badge: string;
+  title: string;
+  price: string;
+  period?: string;
+  subtitle: string;
+  features: string[];
+  ctaHref: string;
+  ctaLabel: string;
+  current: boolean;
+  highlighted: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-3xl p-8 shadow-sm ring-1 ${
+        highlighted
+          ? "bg-slate-900 text-white ring-slate-900"
+          : "bg-white text-slate-900 ring-slate-200"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div
+          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+            highlighted
+              ? "bg-white/10 text-slate-200"
+              : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          {badge}
+        </div>
+
+        {current && (
+          <div
+            className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+              highlighted
+                ? "bg-emerald-400/20 text-emerald-200"
+                : "bg-emerald-100 text-emerald-700"
+            }`}
+          >
+            Actual
+          </div>
+        )}
+      </div>
+
+      <h3 className="mt-6 text-2xl font-bold">{title}</h3>
+
+      <div className="mt-4 flex items-end gap-1">
+        <span className="text-5xl font-bold">{price}</span>
+        {period && (
+          <span
+            className={`pb-1 text-sm ${
+              highlighted ? "text-slate-300" : "text-slate-500"
+            }`}
+          >
+            {period}
+          </span>
+        )}
+      </div>
+
+      <p
+        className={`mt-4 leading-7 ${
+          highlighted ? "text-slate-300" : "text-slate-600"
+        }`}
+      >
+        {subtitle}
+      </p>
+
+      <ul className="mt-8 space-y-3">
+        {features.map((feature, index) => (
+          <li
+            key={index}
+            className={`flex items-start gap-3 ${
+              highlighted ? "text-slate-100" : "text-slate-700"
+            }`}
+          >
+            <span className="mt-1 text-sm">✓</span>
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+
+      <Link
+        href={ctaHref}
+        className={`mt-10 inline-flex w-full justify-center rounded-xl px-5 py-3 text-center font-semibold transition ${
+          highlighted
+            ? "bg-white text-slate-900 hover:bg-slate-100"
+            : "bg-slate-900 text-white hover:bg-slate-700"
+        }`}
+      >
+        {ctaLabel}
+      </Link>
+    </div>
+  );
+}
+
+function ValueRow({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 text-slate-700 ring-1 ring-slate-200">
+      {text}
+    </div>
+  );
+}
+
+function ValueRowDark({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl bg-white/5 p-4 text-slate-200 ring-1 ring-white/10">
+      {text}
     </div>
   );
 }
