@@ -41,7 +41,7 @@ function buildBasicPrompt({
   goal,
 }: Required<Pick<RequestBody, "age" | "sex" | "stress" | "sleep" | "goal">>) {
   return `
-Eres un analista de salud preventiva y bienestar.
+Eres un analista de salud preventiva y bienestar para una app moderna orientada a claridad, hábitos y mejora personal.
 
 Analiza este perfil:
 - Edad: ${age}
@@ -64,8 +64,11 @@ Reglas:
 - Si duerme poco, baja el score.
 - Si el objetivo es salud general y el perfil es razonable, score medio-alto.
 - No diagnostiques enfermedades.
-- Escribe en español claro, profesional y amigable.
+- No hables de tratamientos ni prescripciones.
+- Escribe en español claro, profesional, moderno y amigable.
+- El summary debe sonar útil y accionable, no genérico.
 - factors debe tener exactamente 3 elementos.
+- Los factors deben ser concretos y cortos, tipo: "estrés elevado", "sueño subóptimo", "base funcional".
 `;
 }
 
@@ -77,7 +80,7 @@ function buildAdvancedPrompt({
   goal,
 }: Required<Pick<RequestBody, "age" | "sex" | "stress" | "sleep" | "goal">>) {
   return `
-Eres un analista avanzado de salud preventiva y bienestar.
+Eres un analista avanzado de salud preventiva y bienestar para una app premium orientada a claridad, hábitos y mejora personal.
 
 Analiza este perfil:
 - Edad: ${age}
@@ -114,30 +117,42 @@ Reglas:
 - Si duerme poco, baja el score.
 - Si el objetivo es salud general y el perfil es razonable, score medio-alto.
 - No diagnostiques enfermedades.
-- Escribe en español claro, profesional y amigable.
+- No hagas afirmaciones médicas.
+- No prescribas tratamientos.
+- Escribe en español claro, profesional, moderno y amigable.
+- El summary debe sonar más útil, específico y accionable que el análisis básico.
 - factors debe tener exactamente 3 elementos.
 - advanced_recommendations debe tener exactamente 3 elementos.
-- advanced_recommendations debe incluir sugerencias de hábitos, timing o enfoque de bienestar, sin hacer afirmaciones médicas ni prescribir tratamientos.
+- Cada recommendation debe sentirse premium y personalizada.
+- Las recomendaciones deben incluir hábitos, timing, consistencia, enfoque, recuperación, energía o bienestar según el perfil.
+- No repitas el mismo concepto en las 3 recomendaciones.
+- Cada title debe ser corto, fuerte y orientado a acción.
+- Cada description debe ser breve, útil y entendible por una persona no técnica.
 `;
 }
 
 function sanitizeAnalysisResponse(
-  parsed: any,
-  advancedEnabled: boolean
+  parsed: unknown,
+  advancedEnabled: boolean,
+  goal: string
 ): SafeAnalysisResponse {
+  const obj =
+    parsed && typeof parsed === "object" ? (parsed as Record<string, any>) : {};
+
   const safeScore =
-    typeof parsed?.score === "number" && Number.isFinite(parsed.score)
-      ? Math.min(95, Math.max(40, Math.round(parsed.score)))
+    typeof obj.score === "number" && Number.isFinite(obj.score)
+      ? Math.min(95, Math.max(40, Math.round(obj.score)))
       : 70;
 
   const safeSummary =
-    typeof parsed?.summary === "string" && parsed.summary.trim()
-      ? parsed.summary.trim()
-      : "No fue posible generar un análisis detallado.";
+    typeof obj.summary === "string" && obj.summary.trim()
+      ? obj.summary.trim()
+      : "Tu resultado muestra una lectura inicial útil para entender tu punto de partida actual.";
 
-  const safeFactors = Array.isArray(parsed?.factors)
-    ? parsed.factors
+  const safeFactors = Array.isArray(obj.factors)
+    ? obj.factors
         .filter((item: unknown) => typeof item === "string" && item.trim())
+        .map((item: string) => item.trim())
         .slice(0, 3)
     : [];
 
@@ -158,16 +173,17 @@ function sanitizeAnalysisResponse(
   }
 
   const safeAdvancedRecommendations = Array.isArray(
-    parsed?.advanced_recommendations
+    obj.advanced_recommendations
   )
-    ? parsed.advanced_recommendations
+    ? obj.advanced_recommendations
         .filter(
-          (item: any) =>
+          (item: unknown) =>
             item &&
-            typeof item.title === "string" &&
-            item.title.trim() &&
-            typeof item.description === "string" &&
-            item.description.trim()
+            typeof item === "object" &&
+            typeof (item as any).title === "string" &&
+            (item as any).title.trim() &&
+            typeof (item as any).description === "string" &&
+            (item as any).description.trim()
         )
         .slice(0, 3)
         .map((item: any) => ({
@@ -177,23 +193,106 @@ function sanitizeAnalysisResponse(
     : [];
 
   if (safeAdvancedRecommendations.length === 0) {
-    safeAdvancedRecommendations.push(
+    const fallbackByGoal: Record<string, AdvancedRecommendation[]> = {
+      energy: [
+        {
+          title: "Recuperación energética",
+          description:
+            "Ordena mejor tu descanso, hidratación y ritmo diario para sostener energía con más estabilidad.",
+        },
+        {
+          title: "Bloques de activación",
+          description:
+            "Concentra tus tareas más exigentes en tus horas más funcionales para aprovechar mejor tu perfil actual.",
+        },
+        {
+          title: "Consistencia física y mental",
+          description:
+            "Pequeños ajustes diarios bien repetidos pueden elevar tu sensación general de rendimiento.",
+        },
+      ],
+      focus: [
+        {
+          title: "Protección del enfoque",
+          description:
+            "Reduce interrupciones y agrupa tareas clave en bloques cortos para mejorar claridad mental.",
+        },
+        {
+          title: "Energía cognitiva",
+          description:
+            "Cuida sueño, pausas y ritmo de trabajo para evitar fatiga mental acumulada.",
+        },
+        {
+          title: "Rutina de profundidad",
+          description:
+            "Establece momentos del día con menor ruido para sostener concentración con más intención.",
+        },
+      ],
+      sleep: [
+        {
+          title: "Higiene del sueño",
+          description:
+            "Mantén un horario más estable y reduce estímulos intensos antes de dormir para favorecer recuperación.",
+        },
+        {
+          title: "Señales de descanso",
+          description:
+            "Observa cómo cambia tu energía durante el día para ajustar mejor tu rutina nocturna.",
+        },
+        {
+          title: "Preparación nocturna",
+          description:
+            "Una secuencia simple y constante antes de dormir puede ayudarte a mejorar la calidad del descanso.",
+        },
+      ],
+      health: [
+        {
+          title: "Base de bienestar",
+          description:
+            "Enfócate primero en hábitos sostenibles antes de buscar cambios intensos o difíciles de mantener.",
+        },
+        {
+          title: "Prioridad diaria",
+          description:
+            "Elige una o dos acciones clave para reforzar tu salud general sin saturarte.",
+        },
+        {
+          title: "Mejora acumulativa",
+          description:
+            "La continuidad suele generar más valor que los cambios bruscos cuando buscas bienestar integral.",
+        },
+      ],
+    };
+
+    const genericFallback: AdvancedRecommendation[] = [
       {
-        title: "Mejora del descanso",
+        title: "Más claridad diaria",
         description:
-          "Prioriza una rutina de sueño constante y reduce estímulos intensos antes de dormir.",
+          "Ordenar mejor tus hábitos base puede ayudarte a mejorar energía, enfoque o recuperación con más consistencia.",
       },
       {
-        title: "Gestión del estrés",
+        title: "Prioridad correcta",
         description:
-          "Introduce pausas activas, respiración guiada o caminatas cortas para reducir la carga diaria.",
+          "Atacar primero los factores que más pesan en tu perfil actual suele producir mejoras más visibles.",
       },
       {
-        title: "Soporte del objetivo principal",
+        title: "Mejora sostenible",
         description:
-          "Ajusta hábitos diarios de forma consistente según tu meta actual de energía, enfoque o bienestar general.",
-      }
-    );
+          "Pequeños ajustes repetidos con intención suelen generar resultados más útiles que esfuerzos aislados.",
+      },
+    ];
+
+    baseResponse.advancedRecommendations =
+      fallbackByGoal[goal] || genericFallback;
+    return baseResponse;
+  }
+
+  while (safeAdvancedRecommendations.length < 3) {
+    safeAdvancedRecommendations.push({
+      title: "Optimización gradual",
+      description:
+        "Refuerza hábitos simples y consistentes para mejorar tu lectura general con más continuidad.",
+    });
   }
 
   baseResponse.advancedRecommendations = safeAdvancedRecommendations.slice(0, 3);
@@ -248,6 +347,112 @@ async function getUserPlanFromRequest(req: Request): Promise<PlanType> {
   return normalizePlan((profile as UserProfileRow | null)?.plan);
 }
 
+function buildFallbackRawJson(advancedEnabled: boolean, goal: string) {
+  if (!advancedEnabled) {
+    return JSON.stringify({
+      score: 70,
+      summary:
+        "Tu resultado muestra una lectura inicial útil para entender tu punto de partida actual.",
+      factors: ["perfil general", "información limitada", "revisión recomendada"],
+    });
+  }
+
+  const fallbackMap: Record<string, AdvancedRecommendation[]> = {
+    energy: [
+      {
+        title: "Recuperación energética",
+        description:
+          "Ordena mejor tu descanso, hidratación y ritmo diario para sostener energía con más estabilidad.",
+      },
+      {
+        title: "Bloques de activación",
+        description:
+          "Concentra tus tareas más exigentes en tus horas más funcionales para aprovechar mejor tu perfil actual.",
+      },
+      {
+        title: "Consistencia física y mental",
+        description:
+          "Pequeños ajustes diarios bien repetidos pueden elevar tu sensación general de rendimiento.",
+      },
+    ],
+    focus: [
+      {
+        title: "Protección del enfoque",
+        description:
+          "Reduce interrupciones y agrupa tareas clave en bloques cortos para mejorar claridad mental.",
+      },
+      {
+        title: "Energía cognitiva",
+        description:
+          "Cuida sueño, pausas y ritmo de trabajo para evitar fatiga mental acumulada.",
+      },
+      {
+        title: "Rutina de profundidad",
+        description:
+          "Establece momentos del día con menor ruido para sostener concentración con más intención.",
+      },
+    ],
+    sleep: [
+      {
+        title: "Higiene del sueño",
+        description:
+          "Mantén un horario más estable y reduce estímulos intensos antes de dormir para favorecer recuperación.",
+      },
+      {
+        title: "Señales de descanso",
+        description:
+          "Observa cómo cambia tu energía durante el día para ajustar mejor tu rutina nocturna.",
+      },
+      {
+        title: "Preparación nocturna",
+        description:
+          "Una secuencia simple y constante antes de dormir puede ayudarte a mejorar la calidad del descanso.",
+      },
+    ],
+    health: [
+      {
+        title: "Base de bienestar",
+        description:
+          "Enfócate primero en hábitos sostenibles antes de buscar cambios intensos o difíciles de mantener.",
+      },
+      {
+        title: "Prioridad diaria",
+        description:
+          "Elige una o dos acciones clave para reforzar tu salud general sin saturarte.",
+      },
+      {
+        title: "Mejora acumulativa",
+        description:
+          "La continuidad suele generar más valor que los cambios bruscos cuando buscas bienestar integral.",
+      },
+    ],
+  };
+
+  return JSON.stringify({
+    score: 70,
+    summary:
+      "Tu resultado muestra una lectura útil de tu situación actual y sugiere que aún hay espacio para mejorar con más intención.",
+    factors: ["perfil general", "información limitada", "revisión recomendada"],
+    advanced_recommendations: fallbackMap[goal] || [
+      {
+        title: "Más claridad diaria",
+        description:
+          "Ordenar mejor tus hábitos base puede ayudarte a mejorar energía, enfoque o recuperación con más consistencia.",
+      },
+      {
+        title: "Prioridad correcta",
+        description:
+          "Atacar primero los factores que más pesan en tu perfil actual suele producir mejoras más visibles.",
+      },
+      {
+        title: "Mejora sostenible",
+        description:
+          "Pequeños ajustes repetidos con intención suelen generar resultados más útiles que esfuerzos aislados.",
+      },
+    ],
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as RequestBody;
@@ -300,31 +505,23 @@ export async function POST(req: Request) {
       input: prompt,
     });
 
-    const fallbackBasic =
-      '{"score":70,"summary":"No fue posible generar un análisis detallado.","factors":["perfil general","información limitada","revisión recomendada"]}';
+    const fallbackRawJson = buildFallbackRawJson(advancedEnabled, goal);
 
-    const fallbackAdvanced =
-      '{"score":70,"summary":"No fue posible generar un análisis detallado.","factors":["perfil general","información limitada","revisión recomendada"],"advanced_recommendations":[{"title":"Mejora del descanso","description":"Prioriza una rutina de sueño constante y reduce estímulos intensos antes de dormir."},{"title":"Gestión del estrés","description":"Introduce pausas activas, respiración guiada o caminatas cortas para reducir la carga diaria."},{"title":"Soporte del objetivo principal","description":"Ajusta hábitos diarios de forma consistente según tu meta actual de energía, enfoque o bienestar general."}]}';
+    const text = response.output_text?.trim() || fallbackRawJson;
 
-    const text =
-      response.output_text?.trim() ||
-      (advancedEnabled ? fallbackAdvanced : fallbackBasic);
-
-    let parsed: any;
+    let parsed: unknown;
 
     try {
       parsed = JSON.parse(text);
     } catch {
-      return Response.json(
-        {
-          error: "La IA devolvió un formato inválido.",
-          raw: text,
-        },
-        { status: 500 }
-      );
+      parsed = JSON.parse(fallbackRawJson);
     }
 
-    const safeResponse = sanitizeAnalysisResponse(parsed, advancedEnabled);
+    const safeResponse = sanitizeAnalysisResponse(
+      parsed,
+      advancedEnabled,
+      goal
+    );
 
     return Response.json({
       plan,
@@ -334,7 +531,7 @@ export async function POST(req: Request) {
       wasDowngraded,
       upgradeRequired: wasDowngraded,
       upgradeMessage: wasDowngraded
-        ? "Tu plan actual no incluye análisis avanzado. Actualiza a Pro o Premium para desbloquearlo."
+        ? "Tu plan actual no incluye análisis avanzado. Actualiza a Pro o Premium para desbloquear recomendaciones más profundas y personalizadas."
         : null,
       score: safeResponse.score,
       summary: safeResponse.summary,

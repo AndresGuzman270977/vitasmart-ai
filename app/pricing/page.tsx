@@ -5,8 +5,10 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import {
+  getHistoryLimitLabel,
   getPlanLabel,
   getPlanLimits,
+  getUpgradeTargetLabel,
   normalizePlan,
   type UserPlan,
 } from "../lib/planLimits";
@@ -493,6 +495,28 @@ function PricingPageContent() {
     cancelAtPeriodEnd &&
     subscriptionActionLoading === null;
 
+  const currentPlanLabel = currentPlan ? getPlanLabel(currentPlan) : null;
+  const recommendedNextLabel = currentPlan
+    ? getUpgradeTargetLabel(currentPlan)
+    : "Pro";
+  const highlightResultsIntent =
+    checkoutPlan === "pro" || checkoutPlan === "premium";
+  const heroTitle = currentPlan
+    ? currentPlan === "free"
+      ? "Desbloquea una versión mucho más profunda de tu análisis"
+      : currentPlan === "pro"
+      ? "Ya tienes una base fuerte. Premium lleva la experiencia más lejos"
+      : "Ya estás en la experiencia más completa"
+    : "Empieza gratis. Escala cuando quieras más profundidad";
+
+  const heroDescription = currentPlan
+    ? currentPlan === "free"
+      ? "Free te permite descubrir el valor inicial. Pro y Premium convierten esa primera lectura en una experiencia mucho más útil, personalizada y accionable."
+      : currentPlan === "pro"
+      ? "Pro ya desbloquea mucho valor. Premium es el siguiente salto si quieres máxima continuidad, mayor profundidad y una experiencia más refinada."
+      : "Premium te da la capa más completa del ecosistema VitaSmart AI, con máxima profundidad, continuidad y personalización."
+    : "Free te permite descubrir la plataforma. Pro convierte la experiencia en seguimiento real. Premium desbloquea la versión más completa, profunda y personalizada de VitaSmart AI.";
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-6xl">
@@ -502,14 +526,11 @@ function PricingPageContent() {
           </div>
 
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            Empieza gratis.
-            <span className="block">Escala cuando quieras más poder.</span>
+            {heroTitle}
           </h1>
 
           <p className="mx-auto mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-            Free te permite descubrir la plataforma. Pro convierte la experiencia
-            en seguimiento real. Premium desbloquea la versión más completa,
-            profunda y personalizada de VitaSmart AI.
+            {heroDescription}
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -519,18 +540,28 @@ function PricingPageContent() {
             <Pill text="Premium = máxima profundidad" />
           </div>
 
-          <div className="mt-8 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <div className="mt-8 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             {loading ? (
               <span className="text-slate-600">Cargando tu plan actual...</span>
             ) : currentPlan ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="text-slate-900">
-                  Plan actual: <strong>{getPlanLabel(currentPlan)}</strong>
+                  Plan actual: <strong>{currentPlanLabel}</strong>
                 </div>
                 <div className="text-sm text-slate-600">
                   Estado de suscripción:{" "}
                   <strong>{subscriptionStatusLabel}</strong>
                 </div>
+
+                {currentPlan !== "premium" && (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-slate-700">
+                    <span className="font-semibold text-slate-900">
+                      Próximo salto recomendado:
+                    </span>{" "}
+                    {recommendedNextLabel}. Es la forma más rápida de desbloquear
+                    una experiencia más profunda y más útil.
+                  </div>
+                )}
               </div>
             ) : (
               <span className="text-slate-600">
@@ -542,6 +573,15 @@ function PricingPageContent() {
           {message && (
             <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
               {message}
+            </div>
+          )}
+
+          {highlightResultsIntent && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              Estás a un paso de desbloquear una lectura más completa de tu
+              análisis. Al mejorar tu plan, obtienes recomendaciones más
+              profundas, mejor priorización y una experiencia mucho más
+              accionable.
             </div>
           )}
 
@@ -628,14 +668,10 @@ function PricingPageContent() {
             badge="Starter"
             title="Free"
             price="$0"
-            subtitle="Perfecto para descubrir el valor de la plataforma"
-            emotionalLine="Empieza sin barreras y entiende tu punto de partida."
+            subtitle="Perfecto para descubrir el valor inicial de la plataforma"
+            emotionalLine="Empieza sin barreras, entiende tu punto de partida y valida si VitaSmart AI encaja contigo."
             features={[
-              `Hasta ${
-                Number.isFinite(freeLimits.historyLimit)
-                  ? freeLimits.historyLimit
-                  : "∞"
-              } análisis guardados`,
+              `Hasta ${getHistoryLimitLabel("free")} análisis guardados`,
               "Health Score",
               "Análisis base",
               "Marketplace general",
@@ -655,13 +691,9 @@ function PricingPageContent() {
             price="$9"
             period="/mes"
             subtitle="La opción que convierte curiosidad en seguimiento real"
-            emotionalLine="Aquí es donde VitaSmart AI se vuelve mucho más poderosa."
+            emotionalLine="Aquí es donde VitaSmart AI empieza a sentirse mucho más poderosa, útil y accionable."
             features={[
-              `Hasta ${
-                Number.isFinite(proLimits.historyLimit)
-                  ? proLimits.historyLimit
-                  : "∞"
-              } análisis guardados`,
+              `Hasta ${getHistoryLimitLabel("pro")} análisis guardados`,
               "IA avanzada desbloqueada",
               "Recomendaciones priorizadas",
               "Marketplace inteligente",
@@ -674,7 +706,7 @@ function PricingPageContent() {
                 ? "Plan actual"
                 : hasPaidPlan
                 ? "Cambiar desde controles superiores"
-                : "Quiero Pro"
+                : "Desbloquear Pro"
             }
             secondaryLabel="Mejor equilibrio entre precio y valor"
             onSelect={() => handleCheckout("pro")}
@@ -683,6 +715,7 @@ function PricingPageContent() {
             }
             highlighted={true}
             current={currentPlan === "pro"}
+            recommended={true}
           />
 
           <PricingCard
@@ -690,10 +723,10 @@ function PricingPageContent() {
             title="Premium"
             price="$19"
             period="/mes"
-            subtitle="La versión más completa de toda la experiencia"
-            emotionalLine="Pensado para usuarios que quieren máximo control y profundidad."
+            subtitle="La versión más completa y refinada de toda la experiencia"
+            emotionalLine="Pensado para usuarios que quieren máximo control, mayor continuidad y la profundidad más alta disponible."
             features={[
-              "Análisis ilimitados",
+              `Hasta ${getHistoryLimitLabel("premium")} análisis guardados`,
               "Todo lo incluido en Pro",
               "Marketplace premium",
               "Mayor personalización",
@@ -706,7 +739,7 @@ function PricingPageContent() {
                 ? "Plan actual"
                 : hasPaidPlan
                 ? "Cambiar desde controles superiores"
-                : "Quiero Premium"
+                : "Ir a Premium"
             }
             secondaryLabel="Máximo valor para usuarios intensivos"
             onSelect={() => handleCheckout("premium")}
@@ -765,11 +798,11 @@ function PricingPageContent() {
               />
               <FeatureRow
                 title="Pro"
-                description="Para usuarios que ya quieren una experiencia más profunda y accionable."
+                description="Para usuarios que ya quieren una experiencia más profunda, accionable y mucho más útil."
               />
               <FeatureRow
                 title="Premium"
-                description="Para quienes quieren la versión más completa y avanzada de la plataforma."
+                description="Para quienes quieren la versión más completa, más avanzada y más refinada de la plataforma."
               />
             </div>
           </div>
@@ -793,9 +826,9 @@ function PricingPageContent() {
               <tbody className="divide-y divide-slate-100">
                 <PricingRow
                   label="Historial guardado"
-                  free="3"
-                  pro="50"
-                  premium="Ilimitado"
+                  free={getHistoryLimitLabel("free")}
+                  pro={getHistoryLimitLabel("pro")}
+                  premium={getHistoryLimitLabel("premium")}
                 />
                 <PricingRow
                   label="Análisis base"
@@ -816,7 +849,7 @@ function PricingPageContent() {
                   premium="Sí"
                 />
                 <PricingRow
-                  label="Bundles premium"
+                  label="Marketplace premium"
                   free="No"
                   pro="No"
                   premium="Sí"
@@ -884,6 +917,7 @@ function PricingCard({
   disabled,
   highlighted,
   current,
+  recommended = false,
 }: {
   badge: string;
   title: string;
@@ -898,15 +932,22 @@ function PricingCard({
   disabled: boolean;
   highlighted: boolean;
   current: boolean;
+  recommended?: boolean;
 }) {
   return (
     <div
-      className={`rounded-3xl p-8 shadow-sm ring-1 ${
+      className={`relative rounded-3xl p-8 shadow-sm ring-1 ${
         highlighted
           ? "bg-slate-900 text-white ring-slate-900"
           : "bg-white text-slate-900 ring-slate-200"
       }`}
     >
+      {recommended && (
+        <div className="absolute -top-3 left-6 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm">
+          Recomendado
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3">
         <div
           className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${

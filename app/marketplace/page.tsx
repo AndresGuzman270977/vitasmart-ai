@@ -12,6 +12,7 @@ import { supabase } from "../lib/supabase";
 import {
   getPlanLabel,
   getPlanLimits,
+  getUpgradeTargetLabel,
   normalizePlan,
   type PlanType,
 } from "../lib/planLimits";
@@ -154,6 +155,8 @@ export default function MarketplacePage() {
   const planLimits = useMemo(() => getPlanLimits(plan), [plan]);
   const smartMarketplaceEnabled = planLimits.marketplaceMode !== "basic";
   const premiumMarketplaceEnabled = planLimits.marketplaceMode === "premium";
+  const nextRecommendedPlan =
+    plan !== "premium" ? getUpgradeTargetLabel(plan) : null;
 
   const marketplaceModeLabel = useMemo(() => {
     if (premiumMarketplaceEnabled) return "Inteligente Premium";
@@ -218,17 +221,34 @@ export default function MarketplacePage() {
 
   const marketplaceNarrative = useMemo(() => {
     if (premiumMarketplaceEnabled) {
-      return "Tu experiencia actual te permite explorar recomendaciones mejor priorizadas y una navegación más premium del catálogo.";
+      return "Tu experiencia actual te permite explorar recomendaciones mejor priorizadas, con una sensación más premium y más alineada con tu perfil.";
     }
 
     if (smartMarketplaceEnabled) {
-      return "Tu marketplace está usando señales de tu perfil para ayudarte a descubrir opciones con más intención.";
+      return "Tu marketplace ya usa señales de tu perfil para ayudarte a descubrir opciones con más intención y más contexto.";
     }
 
-    return "Ahora mismo estás viendo el catálogo general. El verdadero salto ocurre cuando el marketplace empieza a responder a tu perfil.";
+    return "Ahora mismo estás viendo el catálogo general. El verdadero salto aparece cuando el marketplace deja de ser genérico y empieza a responder a tu perfil.";
   }, [premiumMarketplaceEnabled, smartMarketplaceEnabled]);
 
+  const personalizationNarrative = useMemo(() => {
+    if (premiumMarketplaceEnabled && latestAssessment) {
+      return "Tu catálogo no solo muestra productos: intenta priorizar mejor lo que podría tener más afinidad con tu momento actual.";
+    }
+
+    if (smartMarketplaceEnabled && latestAssessment) {
+      return "Ya estás viendo una versión más inteligente del catálogo, usando señales de tu último análisis para ordenar mejor las recomendaciones.";
+    }
+
+    if (smartMarketplaceEnabled) {
+      return "Tu plan ya permite una experiencia más inteligente, pero hará más sentido cuando la plataforma tenga un análisis reciente para trabajar.";
+    }
+
+    return "El catálogo base te permite explorar, pero todavía no se adapta a lo que más te conviene según tu objetivo y tus señales actuales.";
+  }, [premiumMarketplaceEnabled, smartMarketplaceEnabled, latestAssessment]);
+
   const canShowUpgradePrompt = plan !== "premium";
+  const hasAssessmentForRanking = Boolean(latestAssessment);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -271,12 +291,34 @@ export default function MarketplacePage() {
             </p>
           </div>
 
+          <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+            <div className="text-sm font-semibold text-violet-900">
+              Cómo se siente este marketplace hoy para ti
+            </div>
+            <p className="mt-2 text-sm leading-6 text-violet-800">
+              {personalizationNarrative}
+            </p>
+          </div>
+
           {smartMarketplaceEnabled && latestAssessment ? (
             <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
               Estás viendo recomendaciones priorizadas según tu último análisis:
               objetivo <strong>{translateGoal(latestAssessment.goal)}</strong>,
               estrés <strong>{translateStress(latestAssessment.stress)}</strong>,
               sueño <strong>{translateSleep(latestAssessment.sleep)}</strong>.
+            </div>
+          ) : smartMarketplaceEnabled && !latestAssessment ? (
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Tu plan ya permite una experiencia más inteligente, pero todavía no
+              hay un análisis reciente para personalizar el ranking.
+              <div className="mt-3">
+                <Link
+                  href="/quiz"
+                  className="inline-flex rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-700"
+                >
+                  Hacer análisis
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -288,6 +330,13 @@ export default function MarketplacePage() {
                 desbloquear recomendaciones personalizadas según tu análisis,
                 actualiza a Pro o Premium.
               </div>
+
+              {nextRecommendedPlan && (
+                <div className="mt-2">
+                  Próximo salto recomendado: <strong>{nextRecommendedPlan}</strong>.
+                </div>
+              )}
+
               <div className="mt-3">
                 <Link
                   href="/pricing"
@@ -314,7 +363,7 @@ export default function MarketplacePage() {
               title="Modo actual"
               value={
                 smartMarketplaceEnabled
-                  ? latestAssessment
+                  ? hasAssessmentForRanking
                     ? "Personalizado"
                     : "Inteligente"
                   : "General"
@@ -423,8 +472,9 @@ export default function MarketplacePage() {
                       No encontramos recomendaciones personalizadas
                     </h3>
                     <p className="mt-3 text-slate-600">
-                      Haz un análisis o ajusta los filtros para mejorar el
-                      ranking.
+                      {hasAssessmentForRanking
+                        ? "Ajusta los filtros para encontrar coincidencias más útiles."
+                        : "Haz un análisis para que el ranking tenga más contexto."}
                     </p>
                   </div>
                 ) : (
@@ -466,12 +516,19 @@ export default function MarketplacePage() {
                     </p>
                   </div>
 
-                  <div className="mt-5">
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                     <Link
                       href="/pricing"
                       className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
                     >
                       Desbloquear marketplace inteligente
+                    </Link>
+
+                    <Link
+                      href="/quiz"
+                      className="inline-flex rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700"
+                    >
+                      Hacer análisis
                     </Link>
                   </div>
                 </div>

@@ -26,16 +26,24 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   },
 };
 
-export function normalizePlan(plan?: string | null): PlanType {
-  if (plan === "pro" || plan === "premium") {
-    return plan;
-  }
+const PLAN_ORDER: Record<PlanType, number> = {
+  free: 0,
+  pro: 1,
+  premium: 2,
+};
 
+export function normalizePlan(plan?: string | null): PlanType {
+  const normalized = String(plan || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized === "pro") return "pro";
+  if (normalized === "premium") return "premium";
   return "free";
 }
 
 export function getPlanLimits(plan: PlanType): PlanLimits {
-  return PLAN_LIMITS[normalizePlan(plan)] || PLAN_LIMITS.free;
+  return PLAN_LIMITS[normalizePlan(plan)];
 }
 
 export function canSaveMoreAnalyses(
@@ -64,8 +72,34 @@ export function isPremiumPlan(plan: PlanType): boolean {
 }
 
 export function isProOrHigher(plan: PlanType): boolean {
+  return getPlanRank(plan) >= PLAN_ORDER.pro;
+}
+
+export function isFreePlan(plan: PlanType): boolean {
+  return normalizePlan(plan) === "free";
+}
+
+export function getPlanRank(plan: PlanType): number {
+  return PLAN_ORDER[normalizePlan(plan)];
+}
+
+export function isSameOrHigherPlan(
+  currentPlan: PlanType,
+  targetPlan: PlanType
+): boolean {
+  return getPlanRank(currentPlan) >= getPlanRank(targetPlan);
+}
+
+export function getNextPlan(plan: PlanType): PlanType | null {
   const normalized = normalizePlan(plan);
-  return normalized === "pro" || normalized === "premium";
+
+  if (normalized === "free") return "pro";
+  if (normalized === "pro") return "premium";
+  return null;
+}
+
+export function getUpgradeTargetPlan(plan: PlanType): PlanType | null {
+  return getNextPlan(plan);
 }
 
 export function getPlanLabel(plan: PlanType): string {
@@ -74,4 +108,21 @@ export function getPlanLabel(plan: PlanType): string {
   if (normalized === "premium") return "Premium";
   if (normalized === "pro") return "Pro";
   return "Free";
+}
+
+export function getUpgradeTargetLabel(plan: PlanType): string {
+  const nextPlan = getNextPlan(plan);
+
+  if (!nextPlan) return "Premium";
+  return getPlanLabel(nextPlan);
+}
+
+export function getHistoryLimitLabel(plan: PlanType): string {
+  const limits = getPlanLimits(plan);
+
+  if (!Number.isFinite(limits.historyLimit)) {
+    return "Ilimitado";
+  }
+
+  return String(limits.historyLimit);
 }

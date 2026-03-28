@@ -14,6 +14,7 @@ export default function PremiumGate({
   requiredPlan = "pro",
 }: PremiumGateProps) {
   const isPremium = requiredPlan === "premium";
+  const ctaLabel = isPremium ? "Pasar a Premium" : "Desbloquear mi análisis completo";
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm ring-1 ring-slate-200">
@@ -38,6 +39,17 @@ export default function PremiumGate({
           {description}
         </p>
 
+        <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+          <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+            Estás viendo una parte limitada
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            Al mejorar tu plan, esta sección deja de ser solo una vista parcial y
+            se convierte en una herramienta mucho más útil para tomar decisiones
+            con más claridad, profundidad y continuidad.
+          </p>
+        </div>
+
         <div className="mt-6 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
           <div className="text-sm font-semibold text-slate-900">
             Lo que desbloqueas al mejorar tu plan
@@ -45,27 +57,27 @@ export default function PremiumGate({
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <BenefitItem
-              title="Más profundidad"
+              title={isPremium ? "Más profundidad" : "Más inteligencia"}
               description={
                 isPremium
-                  ? "Acceso a la versión más completa y refinada de la experiencia."
-                  : "Análisis y sugerencias con más contexto e inteligencia."
+                  ? "Acceso a la versión más completa, refinada y valiosa de la experiencia."
+                  : "Análisis, priorización y sugerencias con más contexto y más utilidad real."
               }
             />
             <BenefitItem
               title="Más personalización"
               description={
                 isPremium
-                  ? "Una experiencia premium con mayor valor percibido."
-                  : "Resultados más útiles según tu perfil y evolución."
+                  ? "Una experiencia premium con mayor profundidad y mejor sensación de valor."
+                  : "Resultados más relevantes según tu perfil, tu objetivo y tus señales actuales."
               }
             />
             <BenefitItem
               title="Más continuidad"
               description={
                 isPremium
-                  ? "La capa más avanzada del ecosistema VitaSmart AI."
-                  : "Una experiencia pensada para seguimiento real, no solo consulta puntual."
+                  ? "La capa más avanzada del ecosistema VitaSmart AI para usuarios que quieren la mejor versión."
+                  : "Una experiencia pensada para seguimiento real, no solo para una consulta aislada."
               }
             />
           </div>
@@ -76,7 +88,7 @@ export default function PremiumGate({
             href="/pricing"
             className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
-            Ver planes
+            {ctaLabel}
           </Link>
 
           <Link
@@ -89,7 +101,7 @@ export default function PremiumGate({
 
         <p className="mt-4 text-xs text-slate-500">
           Empieza gratis. Mejora cuando quieras desbloquear una experiencia más
-          poderosa.
+          profunda, más útil y más poderosa.
         </p>
       </div>
     </div>

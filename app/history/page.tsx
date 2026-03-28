@@ -7,6 +7,7 @@ import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import {
   getPlanLabel,
   getPlanLimits,
+  getUpgradeTargetLabel,
   normalizePlan,
   type UserPlan,
 } from "../lib/planLimits";
@@ -155,13 +156,18 @@ export default function HistoryPage() {
     return Math.round(total / items.length);
   }, [items]);
 
+  const bestScore = useMemo(() => {
+    if (items.length === 0) return null;
+    return Math.max(...items.map((item) => Number(item.score || 0)));
+  }, [items]);
+
   const progressNarrative = useMemo(() => {
     if (items.length === 0) {
       return "Todavía no has empezado a construir una línea de evolución.";
     }
 
     if (items.length === 1) {
-      return "Ya tienes tu primer punto de referencia. El verdadero valor crecerá cuando acumules más análisis.";
+      return "Ya tienes tu primer punto de referencia. El verdadero valor del historial aparece cuando empiezas a comparar tu evolución en el tiempo.";
     }
 
     if (scoreDelta === null) {
@@ -169,15 +175,39 @@ export default function HistoryPage() {
     }
 
     if (scoreDelta > 0) {
-      return "Tu resultado más reciente mejoró frente al anterior. Hay señales positivas de progreso.";
+      return "Tu resultado más reciente mejoró frente al anterior. Hay señales positivas de progreso y continuidad.";
     }
 
     if (scoreDelta < 0) {
-      return "Tu último resultado bajó frente al anterior. Esto puede ayudarte a detectar cambios y ajustar hábitos a tiempo.";
+      return "Tu último resultado bajó frente al anterior. Eso también es valioso, porque te ayuda a detectar cambios y reaccionar a tiempo.";
     }
 
-    return "Tu resultado se mantiene estable. Eso también aporta claridad para seguir observando tendencias.";
+    return "Tu resultado se mantiene estable. Eso te da una base útil para seguir observando tendencias con más claridad.";
   }, [items.length, scoreDelta]);
+
+  const visibleVsTotalNarrative = useMemo(() => {
+    if (allItemsCount === 0) {
+      return "Tu historial empezará a tomar valor cuando acumules tus primeros análisis.";
+    }
+
+    if (allItemsCount > items.length) {
+      return `Ahora mismo estás viendo ${items.length} de ${allItemsCount} análisis. Al ampliar tu plan, puedes conservar y revisar una parte mucho más rica de tu evolución.`;
+    }
+
+    return "Tu historial visible ya te permite detectar patrones, comparar resultados y construir más contexto con el tiempo.";
+  }, [allItemsCount, items.length]);
+
+  const nextRecommendedPlan = useMemo(() => {
+    if (plan === "premium") return null;
+    return getUpgradeTargetLabel(plan);
+  }, [plan]);
+
+  const scoreToBest = useMemo(() => {
+    if (latestScore === null || bestScore === null) return null;
+    return Math.max(bestScore - latestScore, 0);
+  }, [latestScore, bestScore]);
+
+  const isHistoryTrimmed = allItemsCount > items.length;
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -217,6 +247,56 @@ export default function HistoryPage() {
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {progressNarrative}
               </p>
+            </div>
+          )}
+
+          {!needsLogin && items.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+              <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+                Progreso acumulado
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                {visibleVsTotalNarrative}
+              </p>
+
+              {scoreToBest !== null && bestScore !== null && (
+                <div className="mt-4 text-sm text-slate-700">
+                  {scoreToBest === 0 ? (
+                    <span>
+                      Tu último resultado coincide con tu mejor score visible:{" "}
+                      <strong>{bestScore}/100</strong>.
+                    </span>
+                  ) : (
+                    <span>
+                      Estás a <strong>{scoreToBest}</strong> punto
+                      {scoreToBest === 1 ? "" : "s"} de tu mejor score visible:{" "}
+                      <strong>{bestScore}/100</strong>.
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isHistoryTrimmed && nextRecommendedPlan && (
+            <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+              <div className="text-sm font-semibold text-sky-900">
+                Tu historial completo puede darte más valor
+              </div>
+              <p className="mt-2 text-sm text-sky-800">
+                Estás viendo solo una parte de tu evolución. Tu siguiente salto
+                recomendado es <strong>{nextRecommendedPlan}</strong> para
+                conservar más contexto y volver este historial mucho más útil.
+              </p>
+
+              <div className="mt-4">
+                <Link
+                  href="/pricing"
+                  className="inline-flex rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-700"
+                >
+                  Ver planes
+                </Link>
+              </div>
             </div>
           )}
 
@@ -272,7 +352,7 @@ export default function HistoryPage() {
           </div>
         ) : (
           <>
-            <div className="mt-8 grid gap-6 md:grid-cols-4">
+            <div className="mt-8 grid gap-6 md:grid-cols-5">
               <MetricCard
                 title="Último score"
                 value={latestScore !== null ? `${latestScore}` : "-"}
@@ -306,6 +386,12 @@ export default function HistoryPage() {
                     : "Registros en pantalla"
                 }
               />
+
+              <MetricCard
+                title="Mejor score"
+                value={bestScore !== null ? `${bestScore}` : "-"}
+                subtitle="Tu punto más alto visible"
+              />
             </div>
 
             <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
@@ -316,9 +402,16 @@ export default function HistoryPage() {
                   </h2>
                   <p className="mt-2 text-slate-600">
                     El valor del historial no está solo en guardar datos, sino
-                    en observar tendencias.
+                    en observar tendencias y repetir mediciones con continuidad.
                   </p>
                 </div>
+
+                <Link
+                  href="/quiz"
+                  className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Repetir análisis
+                </Link>
               </div>
 
               {chartData.length === 0 ? (

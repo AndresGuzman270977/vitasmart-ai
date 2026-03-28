@@ -17,6 +17,7 @@ export default function UpgradePrompt({
 
   const title = getTitle(currentPlan, context);
   const description = getDescription(currentPlan, context);
+  const ctaLabel = getCtaLabel(currentPlan, context);
 
   return (
     <div className="rounded-3xl border border-sky-200 bg-sky-50 p-6 shadow-sm">
@@ -34,27 +35,27 @@ export default function UpgradePrompt({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <UpgradeBenefit
-          title="Más profundidad"
+          title={isFree ? "Más profundidad" : "Más personalización"}
           description={
             isFree
-              ? "Desbloquea IA avanzada y una experiencia mucho más útil."
-              : "Accede a la versión más completa de VitaSmart AI."
+              ? "Desbloquea una lectura más completa, más útil y con mayor sensación de valor."
+              : "Premium añade una capa más refinada para convertir cada resultado en una guía más profunda."
           }
         />
         <UpgradeBenefit
           title="Más continuidad"
           description={
             isFree
-              ? "Construye seguimiento real y no solo consultas puntuales."
-              : "Da más valor a cada análisis dentro de una experiencia premium."
+              ? "Convierte análisis aislados en una experiencia con seguimiento, contexto y progreso."
+              : "Haz que cada análisis, historial y recomendación gane más peso dentro de una experiencia premium."
           }
         />
         <UpgradeBenefit
-          title="Más valor"
+          title={isFree ? "Más inteligencia" : "Más nivel"}
           description={
             isFree
-              ? "Marketplace inteligente, historial ampliado y mejores insights."
-              : "Mayor personalización y máxima profundidad disponible."
+              ? "Activa IA avanzada, mejor priorización y una experiencia mucho más potente."
+              : "Accede a la versión más aspiracional, completa y cuidada de VitaSmart AI."
           }
         />
       </div>
@@ -64,7 +65,7 @@ export default function UpgradePrompt({
           href="/pricing"
           className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
         >
-          Ver planes
+          {ctaLabel}
         </Link>
 
         <Link
@@ -104,7 +105,7 @@ function getTitle(
 ): string {
   if (plan === "free") {
     if (context === "results") {
-      return "Tu resultado puede ser mucho más poderoso";
+      return "Estás viendo solo una parte del valor real";
     }
     if (context === "history") {
       return "Tu historial puede darte mucho más valor";
@@ -113,9 +114,13 @@ function getTitle(
       return "Tu marketplace puede sentirse mucho más inteligente";
     }
     if (context === "quiz") {
-      return "Este mismo análisis puede darte más profundidad";
+      return "Este análisis puede volverse mucho más profundo";
     }
     return "Desbloquea una experiencia mucho más completa";
+  }
+
+  if (context === "results") {
+    return "Tu análisis puede llegar a otro nivel";
   }
 
   if (context === "marketplace") {
@@ -131,7 +136,7 @@ function getDescription(
 ): string {
   if (plan === "free") {
     if (context === "results") {
-      return "Ahora mismo estás viendo la versión base. Al mejorar tu plan, tus resultados pueden incluir recomendaciones avanzadas, mejor priorización y una lectura mucho más profunda.";
+      return "Ahora mismo estás viendo una versión inicial de tu lectura. Al mejorar tu plan, puedes desbloquear recomendaciones avanzadas, mejor priorización y una interpretación mucho más útil para actuar con intención.";
     }
     if (context === "history") {
       return "El historial gana valor cuando puedes ver más contexto, más registros y detectar tendencias con mayor claridad a lo largo del tiempo.";
@@ -145,5 +150,22 @@ function getDescription(
     return "Free es una excelente puerta de entrada, pero Pro y Premium convierten VitaSmart AI en una herramienta mucho más útil, inteligente y valiosa.";
   }
 
+  if (context === "results") {
+    return "Ya tienes una experiencia sólida, pero Premium desbloquea una versión más profunda, más refinada y más personalizada de tu análisis, para que cada resultado se sienta mucho más accionable.";
+  }
+
   return "Ya tienes una experiencia sólida, pero Premium desbloquea la versión más profunda, más refinada y más aspiracional del ecosistema VitaSmart AI.";
+}
+
+function getCtaLabel(
+  plan: UserPlan,
+  context: UpgradePromptProps["context"]
+): string {
+  if (context === "results") {
+    return plan === "free"
+      ? "Desbloquear mi análisis completo"
+      : "Pasar a Premium";
+  }
+
+  return "Ver planes";
 }

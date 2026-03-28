@@ -7,6 +7,7 @@ import { getCurrentUserProfile } from "../lib/profile";
 import {
   getPlanLabel,
   getPlanLimits,
+  getUpgradeTargetLabel,
   normalizePlan,
   type UserPlan,
 } from "../lib/planLimits";
@@ -180,6 +181,11 @@ export default function DashboardPage() {
     return Math.round(total / items.length);
   }, [items]);
 
+  const bestScore = useMemo(() => {
+    if (items.length === 0) return null;
+    return Math.max(...items.map((item) => Number(item.score || 0)));
+  }, [items]);
+
   const chartData: ChartItem[] = useMemo(() => {
     return [...items]
       .slice()
@@ -229,6 +235,44 @@ export default function DashboardPage() {
     if (mode === "smart") return "Inteligente";
     return "General";
   }, [userPlan]);
+
+  const currentMomentum = useMemo(() => {
+    if (!latest) return "Sin datos todavía";
+    if (scoreDelta === null) return "Estás construyendo tu línea base";
+    if (scoreDelta > 0) return "Vas mejorando";
+    if (scoreDelta < 0) return "Tu score bajó recientemente";
+    return "Te estás manteniendo estable";
+  }, [latest, scoreDelta]);
+
+  const progressNarrative = useMemo(() => {
+    if (!latest) {
+      return "Tu dashboard empezará a tomar más valor en cuanto generes tus primeros análisis.";
+    }
+
+    if (items.length === 1) {
+      return "Ya tienes un punto de partida. Lo siguiente es repetir tu análisis para detectar evolución real.";
+    }
+
+    if (scoreDelta !== null && scoreDelta > 0) {
+      return "Tu evolución reciente muestra una señal positiva. Mantener continuidad puede ayudarte a consolidar esa mejora.";
+    }
+
+    if (scoreDelta !== null && scoreDelta < 0) {
+      return "Tu score reciente bajó frente al análisis anterior. Repetir el análisis y revisar tus factores puede ayudarte a recuperar dirección.";
+    }
+
+    return "Tu evolución se ve estable. El siguiente paso es sumar más contexto para detectar tendencias con más claridad.";
+  }, [latest, items.length, scoreDelta]);
+
+  const nextRecommendedPlan = useMemo(() => {
+    if (!userPlan || userPlan === "premium") return null;
+    return getUpgradeTargetLabel(userPlan);
+  }, [userPlan]);
+
+  const scoreToBest = useMemo(() => {
+    if (!latest || bestScore === null) return null;
+    return Math.max(bestScore - latest.score, 0);
+  }, [latest, bestScore]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -307,8 +351,8 @@ export default function DashboardPage() {
 
               <p className="mt-3 max-w-3xl text-slate-600">
                 Este es tu panel principal de salud preventiva. Aquí puedes ver
-                tu score actual, cambios recientes, promedio histórico y los
-                factores principales detectados por la plataforma.
+                tu estado actual, tu evolución reciente y las señales que más
+                conviene seguir de cerca.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -330,6 +374,37 @@ export default function DashboardPage() {
                   </span>
                 )}
               </div>
+
+              {latest && (
+                <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+                  <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+                    Estado actual
+                  </div>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {currentMomentum}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                    {progressNarrative}
+                  </p>
+
+                  {scoreToBest !== null && bestScore !== null && latest && (
+                    <div className="mt-4 text-sm text-slate-700">
+                      {scoreToBest === 0 ? (
+                        <span>
+                          Estás en tu mejor score registrado hasta ahora:{" "}
+                          <strong>{bestScore}/100</strong>.
+                        </span>
+                      ) : (
+                        <span>
+                          Estás a <strong>{scoreToBest}</strong> punto
+                          {scoreToBest === 1 ? "" : "s"} de tu mejor score
+                          registrado: <strong>{bestScore}/100</strong>.
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {userPlan === "free" && (
                 <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
@@ -371,6 +446,20 @@ export default function DashboardPage() {
                       Gestionar suscripción
                     </Link>
                   </div>
+                </div>
+              )}
+
+              {nextRecommendedPlan && (
+                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Próximo salto recomendado
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Tu siguiente mejora natural es{" "}
+                    <strong>{nextRecommendedPlan}</strong>. Es la forma más
+                    directa de convertir este dashboard en una herramienta más
+                    profunda, más útil y más accionable.
+                  </p>
                 </div>
               )}
 
@@ -430,9 +519,9 @@ export default function DashboardPage() {
               />
 
               <MetricCard
-                title="Plan actual"
-                value={userPlan ? getPlanLabel(userPlan) : "-"}
-                subtitle="Nivel activo de tu cuenta"
+                title="Mejor score"
+                value={bestScore !== null ? `${bestScore}` : "-"}
+                subtitle="Tu punto más alto registrado"
               />
             </section>
 
@@ -457,9 +546,24 @@ export default function DashboardPage() {
             </section>
 
             <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-900">
-                Evolución del Health Score
-              </h2>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    Evolución del Health Score
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Ver tu curva en el tiempo te ayuda a detectar si estás
+                    mejorando, estancado o perdiendo consistencia.
+                  </p>
+                </div>
+
+                <Link
+                  href="/quiz"
+                  className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Repetir análisis
+                </Link>
+              </div>
 
               {chartData.length > 0 ? (
                 <div className="mt-6">
@@ -535,8 +639,9 @@ export default function DashboardPage() {
                     Próximo paso sugerido
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Realiza nuevos análisis periódicamente para detectar
-                    tendencias y construir una visión más completa de tu salud.
+                    {latest
+                      ? "Repite tu análisis en los próximos días para detectar si tus señales mejoran, se mantienen o empeoran."
+                      : "Empieza con tu primer análisis para construir una línea base y comenzar a medir evolución."}
                   </p>
                 </div>
               </div>

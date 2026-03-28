@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
-import { getPlanLimits, normalizePlan, type PlanType } from "../lib/planLimits";
+import {
+  getPlanLimits,
+  getUpgradeTargetLabel,
+  normalizePlan,
+  type PlanType,
+} from "../lib/planLimits";
 import UpgradePrompt from "../../components/UpgradePrompt";
 
 const totalSteps = 5;
@@ -61,6 +66,8 @@ export default function QuizPage() {
   const limits = useMemo(() => getPlanLimits(plan), [plan]);
   const advancedAIEnabled = limits.advancedAI;
   const smartMarketplaceEnabled = limits.marketplaceMode !== "basic";
+  const nextRecommendedPlan =
+    !planLoading && plan !== "premium" ? getUpgradeTargetLabel(plan) : null;
 
   const quizNarrative = useMemo(() => {
     if (planLoading) {
@@ -68,15 +75,47 @@ export default function QuizPage() {
     }
 
     if (plan === "premium") {
-      return "Estás entrando con la experiencia más completa de VitaSmart AI.";
+      return "Estás entrando con la experiencia más completa de VitaSmart AI. Tu resultado puede incluir una lectura más profunda, más refinada y más útil para actuar.";
     }
 
     if (plan === "pro") {
-      return "Tu plan actual ya desbloquea una experiencia mucho más profunda y útil.";
+      return "Tu plan actual ya desbloquea una experiencia mucho más profunda y útil. Estás entrando con una versión más poderosa del análisis.";
     }
 
-    return "Estás usando la entrada base. El análisis será útil, pero Pro y Premium desbloquean una lectura mucho más avanzada.";
+    return "Estás usando la entrada base. Tu análisis será útil, pero Pro y Premium desbloquean una lectura mucho más avanzada, más personalizada y más accionable.";
   }, [plan, planLoading]);
+
+  const expectationNarrative = useMemo(() => {
+    if (planLoading) {
+      return "Tu resultado se está preparando según tu plan actual.";
+    }
+
+    if (plan === "premium") {
+      return "Vas a obtener una lectura diseñada para aprovechar al máximo la profundidad disponible en la plataforma.";
+    }
+
+    if (plan === "pro") {
+      return "Tu resultado puede darte una lectura mucho más rica y una base más fuerte para tomar decisiones.";
+    }
+
+    return "Vas a obtener una lectura inicial clara. Si luego quieres más profundidad, podrás desbloquear una versión mucho más completa del análisis.";
+  }, [plan, planLoading]);
+
+  const currentStepNarrative = useMemo(() => {
+    if (step === 1) {
+      return "Empezamos con una base simple para personalizar mejor tu lectura.";
+    }
+    if (step === 2) {
+      return "Este dato ayuda a adaptar mejor el análisis a tu perfil.";
+    }
+    if (step === 3) {
+      return "Aquí medimos una de las variables que más impactan energía, sueño y enfoque.";
+    }
+    if (step === 4) {
+      return "El descanso influye mucho en la calidad de toda tu lectura.";
+    }
+    return "Tu objetivo define hacia dónde se orienta la interpretación de tu resultado.";
+  }, [step]);
 
   const handleNext = () => {
     if (step === 1 && !formData.age) return;
@@ -148,6 +187,15 @@ export default function QuizPage() {
             </p>
           </div>
 
+          <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+            <div className="text-sm font-semibold text-violet-900">
+              Lo que viene después de este quiz
+            </div>
+            <p className="mt-2 text-sm leading-6 text-violet-800">
+              {expectationNarrative}
+            </p>
+          </div>
+
           {!planLoading && plan === "free" && (
             <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <div className="text-sm font-semibold text-amber-900">
@@ -159,6 +207,14 @@ export default function QuizPage() {
                 en los planes Pro y Premium.
               </p>
 
+              {nextRecommendedPlan && (
+                <p className="mt-3 text-sm leading-6 text-amber-800">
+                  Tu siguiente salto recomendado es{" "}
+                  <strong>{nextRecommendedPlan}</strong> si quieres una lectura
+                  mucho más profunda.
+                </p>
+              )}
+
               <div className="mt-4">
                 <Link
                   href="/pricing"
@@ -167,6 +223,30 @@ export default function QuizPage() {
                   Ver planes
                 </Link>
               </div>
+            </div>
+          )}
+
+          {!planLoading && plan === "pro" && (
+            <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+              <div className="text-sm font-semibold text-sky-900">
+                Ya estás en Pro
+              </div>
+              <p className="mt-2 text-sm leading-6 text-sky-800">
+                Tu análisis ya entra con una capa mucho más útil de profundidad,
+                priorización y valor práctico.
+              </p>
+            </div>
+          )}
+
+          {!planLoading && plan === "premium" && (
+            <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-sm font-semibold text-emerald-900">
+                Estás en la experiencia más completa
+              </div>
+              <p className="mt-2 text-sm leading-6 text-emerald-800">
+                Tu resultado aprovechará la versión más profunda y más refinada
+                disponible dentro de VitaSmart AI.
+              </p>
             </div>
           )}
 
@@ -184,6 +264,10 @@ export default function QuizPage() {
                 style={{ width: `${progress}%` }}
               />
             </div>
+
+            <p className="mt-3 text-sm text-slate-600">
+              {currentStepNarrative}
+            </p>
           </div>
 
           <div className="mt-10">
@@ -340,6 +424,19 @@ export default function QuizPage() {
             </div>
           </div>
 
+          {!planLoading && plan !== "premium" && (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-sm font-semibold text-slate-900">
+                Lo que podrías desbloquear después
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Este quiz te dará valor desde ahora. Pero tu siguiente salto
+                puede convertir ese resultado en una lectura mucho más profunda,
+                más accionable y más útil para seguir mejorando.
+              </p>
+            </div>
+          )}
+
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-between">
             <button
               type="button"
@@ -355,7 +452,11 @@ export default function QuizPage() {
               onClick={handleNext}
               className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700"
             >
-              {step === totalSteps ? "Ver resultados" : "Siguiente"}
+              {step === totalSteps
+                ? plan === "free"
+                  ? "Ver mi análisis"
+                  : "Generar mi análisis"
+                : "Siguiente"}
             </button>
           </div>
         </div>

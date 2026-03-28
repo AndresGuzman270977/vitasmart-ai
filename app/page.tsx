@@ -216,9 +216,9 @@ export default function HomePage() {
             </div>
 
             <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
-              Entiende tu salud.
+              Tu Health Score en menos de 60 segundos.
+              <span className="block">Entiende tu salud.</span>
               <span className="block">Mejora tus hábitos.</span>
-              <span className="block">Desbloquea tu mejor versión.</span>
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
@@ -228,16 +228,10 @@ export default function HomePage() {
               para ayudarte a progresar de verdad.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
-                Free para empezar hoy
-              </div>
-              <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
-                Pro para seguimiento real
-              </div>
-              <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
-                Premium para máximo control
-              </div>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <HeroPill text="Free para empezar hoy" />
+              <HeroPill text="Pro para seguimiento real" />
+              <HeroPill text="Premium para máximo control" />
             </div>
 
             <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -245,7 +239,7 @@ export default function HomePage() {
                 href="/quiz"
                 className="rounded-xl bg-slate-900 px-6 py-3 text-center text-base font-semibold text-white transition hover:bg-slate-700"
               >
-                Empezar gratis ahora
+                Empezar análisis gratis
               </Link>
 
               <Link
@@ -270,9 +264,32 @@ export default function HomePage() {
           <div className="grid gap-4">
             <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
               <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Vista rápida
+                Vista previa
               </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+
+              <div className="mt-4 rounded-3xl bg-slate-900 p-6 text-white">
+                <div className="flex items-end gap-2">
+                  <div className="text-6xl font-bold">72</div>
+                  <div className="pb-2 text-slate-300">/100</div>
+                </div>
+
+                <div className="mt-3 text-lg font-semibold">
+                  Health Score estimado
+                </div>
+
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  Un resultado así podría sugerir una base razonable, pero con
+                  oportunidades claras de mejora en energía, sueño o enfoque.
+                </p>
+
+                <div className="mt-6 grid gap-3">
+                  <PreviewSignal label="Estrés alto detectado" />
+                  <PreviewSignal label="Sueño subóptimo" />
+                  <PreviewSignal label="Enfoque mejorable" />
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-3">
                 <HeroStat
                   label="Health Score"
                   value="72"
@@ -289,6 +306,7 @@ export default function HomePage() {
                   note="Seguimiento real"
                 />
               </div>
+
               <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                 <div className="text-sm font-semibold text-slate-900">
                   Lo que hace diferente a VitaSmart AI
@@ -312,7 +330,8 @@ export default function HomePage() {
                 </p>
                 <p>
                   <strong className="text-white">Pro</strong> convierte la
-                  experiencia en seguimiento real con IA avanzada y recomendaciones priorizadas.
+                  experiencia en seguimiento real con IA avanzada y
+                  recomendaciones priorizadas.
                 </p>
                 <p>
                   <strong className="text-white">Premium</strong> desbloquea la
@@ -426,7 +445,11 @@ export default function HomePage() {
             period="/mes"
             subtitle="La experiencia más completa de VitaSmart AI"
             features={[
-              "Análisis ilimitados",
+              `Hasta ${
+                Number.isFinite(premiumLimits.historyLimit)
+                  ? premiumLimits.historyLimit
+                  : "∞"
+              } análisis guardados`,
               "Todo lo de Pro",
               "Marketplace premium",
               "Mayor personalización",
@@ -437,6 +460,93 @@ export default function HomePage() {
             current={currentPlan === "premium"}
             highlighted={false}
           />
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="max-w-3xl">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+              Comparación rápida
+            </div>
+
+            <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Qué cambia realmente cuando mejoras tu plan
+            </h2>
+
+            <p className="mt-4 text-slate-600">
+              Free te deja empezar. Pro te da una experiencia mucho más útil.
+              Premium te entrega la versión más completa de VitaSmart AI.
+            </p>
+          </div>
+
+          <div className="mt-10 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="px-4 py-3 font-medium">Funcionalidad</th>
+                  <th className="px-4 py-3 font-medium">Free</th>
+                  <th className="px-4 py-3 font-medium">Pro</th>
+                  <th className="px-4 py-3 font-medium">Premium</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                <HomeComparisonRow
+                  label="Health Score"
+                  free="Sí"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <HomeComparisonRow
+                  label="Análisis base"
+                  free="Sí"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <HomeComparisonRow
+                  label="IA avanzada"
+                  free="No"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <HomeComparisonRow
+                  label="Historial guardado"
+                  free="3"
+                  pro="50"
+                  premium="Ilimitado"
+                />
+                <HomeComparisonRow
+                  label="Marketplace inteligente"
+                  free="No"
+                  pro="Sí"
+                  premium="Sí"
+                />
+                <HomeComparisonRow
+                  label="Experiencia premium"
+                  free="No"
+                  pro="Parcial"
+                  premium="Sí"
+                />
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/quiz"
+              className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white transition hover:bg-slate-700"
+            >
+              Probar gratis
+            </Link>
+
+            <Link
+              href="/pricing"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Ver comparación completa
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -522,6 +632,22 @@ export default function HomePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function HeroPill({ text }: { text: string }) {
+  return (
+    <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+      {text}
+    </div>
+  );
+}
+
+function PreviewSignal({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl bg-white/5 px-4 py-3 text-sm text-slate-200 ring-1 ring-white/10">
+      {label}
+    </div>
   );
 }
 
@@ -666,6 +792,27 @@ function PlanCard({
         {ctaLabel}
       </Link>
     </div>
+  );
+}
+
+function HomeComparisonRow({
+  label,
+  free,
+  pro,
+  premium,
+}: {
+  label: string;
+  free: string;
+  pro: string;
+  premium: string;
+}) {
+  return (
+    <tr className="text-slate-700">
+      <td className="px-4 py-4 font-medium">{label}</td>
+      <td className="px-4 py-4">{free}</td>
+      <td className="px-4 py-4">{pro}</td>
+      <td className="px-4 py-4">{premium}</td>
+    </tr>
   );
 }
 

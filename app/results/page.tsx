@@ -41,6 +41,11 @@ type BackendAnalysisResponse = {
   advancedRecommendations?: AdvancedRecommendation[];
 };
 
+type LockedPreviewItem = {
+  title: string;
+  description: string;
+};
+
 export default function ResultsPage() {
   return (
     <Suspense
@@ -295,6 +300,172 @@ function ResultsPageContent() {
     return "Este resultado no es una sentencia: es una oportunidad para ordenar prioridades y empezar a construir una versión más fuerte de tu bienestar.";
   }, [analysis?.score]);
 
+  const potentialScore = useMemo(() => {
+    const baseScore = analysis?.score ?? 0;
+    if (!baseScore) return 0;
+
+    const uplift =
+      baseScore >= 85 ? 6 : baseScore >= 70 ? 10 : baseScore >= 55 ? 14 : 18;
+
+    return Math.min(baseScore + uplift, 96);
+  }, [analysis?.score]);
+
+  const visibleAdvancedRecommendations = useMemo(() => {
+    if (!analysis?.advancedRecommendations?.length) return [];
+
+    if (plan === "premium") {
+      return analysis.advancedRecommendations;
+    }
+
+    if (plan === "pro") {
+      return analysis.advancedRecommendations.slice(0, 4);
+    }
+
+    return analysis.advancedRecommendations.slice(0, 2);
+  }, [analysis?.advancedRecommendations, plan]);
+
+  const lockedAdvancedRecommendations = useMemo<LockedPreviewItem[]>(() => {
+    if (plan === "premium") return [];
+
+    const fromBackend =
+      analysis?.advancedRecommendations?.slice(
+        visibleAdvancedRecommendations.length
+      ) || [];
+
+    const normalizedFromBackend = fromBackend.map((item) => ({
+      title: item.title,
+      description: item.description,
+    }));
+
+    if (normalizedFromBackend.length > 0) {
+      return plan === "pro"
+        ? normalizedFromBackend.slice(0, 2)
+        : normalizedFromBackend.slice(0, 3);
+    }
+
+    const fallbackByGoal: Record<string, LockedPreviewItem[]> = {
+      energy: [
+        {
+          title: "Optimización avanzada de energía",
+          description:
+            "Una estrategia más profunda para estabilizar rendimiento y fatiga durante el día.",
+        },
+        {
+          title: "Ajuste de recuperación",
+          description:
+            "Recomendaciones para evitar bajones y mejorar consistencia física y mental.",
+        },
+        {
+          title: "Secuencia de soporte metabólico",
+          description:
+            "Combinación priorizada según tu perfil actual y objetivo principal.",
+        },
+      ],
+      focus: [
+        {
+          title: "Protocolo avanzado de enfoque",
+          description:
+            "Ajustes para sostener claridad mental y reducir dispersión.",
+        },
+        {
+          title: "Mejora de energía cognitiva",
+          description:
+            "Recomendaciones para evitar fatiga mental y elevar rendimiento diario.",
+        },
+        {
+          title: "Sincronización de hábitos clave",
+          description:
+            "Rutinas y apoyos priorizados para mantener continuidad mental.",
+        },
+      ],
+      sleep: [
+        {
+          title: "Ajuste profundo de sueño",
+          description:
+            "Intervenciones más específicas para mejorar descanso y recuperación.",
+        },
+        {
+          title: "Corrección de señales de fatiga",
+          description:
+            "Lectura avanzada para ordenar hábitos que afectan tu descanso.",
+        },
+        {
+          title: "Protocolo nocturno optimizado",
+          description:
+            "Recomendaciones secuenciales para dormir mejor de forma sostenida.",
+        },
+      ],
+      health: [
+        {
+          title: "Estrategia integral de bienestar",
+          description:
+            "Una lectura más profunda de prioridades para fortalecer tu base general.",
+        },
+        {
+          title: "Optimización de consistencia",
+          description:
+            "Acciones concretas para sostener mejoras en energía, sueño y enfoque.",
+        },
+        {
+          title: "Priorización avanzada de soporte",
+          description:
+            "Qué conviene atacar primero según tus señales actuales.",
+        },
+      ],
+    };
+
+    const genericFallback: LockedPreviewItem[] = [
+      {
+        title: "Lectura avanzada de patrones",
+        description:
+          "Una capa más profunda del análisis para detectar prioridades con mayor precisión.",
+      },
+      {
+        title: "Recomendaciones personalizadas adicionales",
+        description:
+          "Más acciones priorizadas según tu perfil actual y tu objetivo principal.",
+      },
+      {
+        title: "Ruta de mejora sugerida",
+        description:
+          "Secuencia recomendada para mejorar tu score con más intención.",
+      },
+    ];
+
+    const selected =
+      fallbackByGoal[formData.goal] && fallbackByGoal[formData.goal].length
+        ? fallbackByGoal[formData.goal]
+        : genericFallback;
+
+    return plan === "pro" ? selected.slice(0, 1) : selected.slice(0, 3);
+  }, [
+    analysis?.advancedRecommendations,
+    visibleAdvancedRecommendations.length,
+    plan,
+    formData.goal,
+  ]);
+
+  const visibleSmartRecommendations = useMemo(() => {
+    if (advancedAIEnabled) {
+      return gatedRecommendations;
+    }
+
+    return recommendations.slice(0, 2);
+  }, [advancedAIEnabled, gatedRecommendations, recommendations]);
+
+  const hiddenSmartRecommendationsCount = Math.max(
+    recommendations.length - visibleSmartRecommendations.length,
+    0
+  );
+
+  const showUpgradeMessaging = !planLoading && plan !== "premium";
+  const showLockedAdvancedPreview =
+    !loadingExplanation &&
+    !explanationError &&
+    !planLoading &&
+    lockedAdvancedRecommendations.length > 0 &&
+    plan !== "premium";
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-5xl">
@@ -365,21 +536,21 @@ function ResultsPageContent() {
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Link
               href="/quiz"
-              className="rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white hover:bg-slate-700"
+              className="rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white transition hover:bg-slate-700"
             >
               Hacer otro análisis
             </Link>
 
             <Link
               href="/history"
-              className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Ver historial
             </Link>
 
             <Link
               href="/pricing"
-              className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Ver planes
             </Link>
@@ -438,6 +609,33 @@ function ResultsPageContent() {
                   </p>
                 </div>
 
+                {showUpgradeMessaging && potentialScore > 0 && (
+                  <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+                    <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+                      Potencial de mejora
+                    </div>
+                    <p className="mt-2 text-lg font-semibold text-slate-900">
+                      Podrías llevar tu Health Score hacia{" "}
+                      <span className="text-violet-700">{potentialScore}+</span>{" "}
+                      con ajustes más personalizados.
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      Estás viendo una versión limitada del análisis. Los planes
+                      Pro y Premium desbloquean recomendaciones más profundas y
+                      una lectura más útil para actuar con intención.
+                    </p>
+
+                    <div className="mt-4">
+                      <Link
+                        href="/pricing"
+                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        Desbloquear mi análisis completo
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-5">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                     Factores principales
@@ -455,15 +653,24 @@ function ResultsPageContent() {
                   </div>
                 </div>
 
-                {advancedAIEnabled &&
-                analysis?.advancedRecommendations?.length ? (
+                {visibleAdvancedRecommendations.length > 0 && (
                   <div className="mt-6">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                      Recomendaciones avanzadas IA
-                    </h3>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                        {advancedAIEnabled
+                          ? "Recomendaciones avanzadas IA"
+                          : "Vista previa de recomendaciones"}
+                      </h3>
+
+                      {!advancedAIEnabled && (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          Vista parcial
+                        </span>
+                      )}
+                    </div>
 
                     <div className="mt-3 grid gap-3">
-                      {analysis.advancedRecommendations.map((item, index) => (
+                      {visibleAdvancedRecommendations.map((item, index) => (
                         <div
                           key={`${item.title}-${index}`}
                           className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
@@ -478,7 +685,58 @@ function ResultsPageContent() {
                       ))}
                     </div>
                   </div>
-                ) : null}
+                )}
+
+                {showLockedAdvancedPreview && (
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                          Recomendaciones bloqueadas
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Estás viendo solo una parte del análisis completo.
+                        </p>
+                      </div>
+
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                        {plan === "free"
+                          ? "Solo ves una vista inicial"
+                          : "Desbloquea más profundidad"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3">
+                      {lockedAdvancedRecommendations.map((item, index) => (
+                        <div
+                          key={`${item.title}-${index}`}
+                          className="rounded-xl border border-slate-200 bg-white p-4"
+                        >
+                          <div className="text-sm font-semibold text-slate-900">
+                            🔒 {item.title}
+                          </div>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {item.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-slate-600">
+                        Desbloquea una evaluación más profunda para acceder a
+                        recomendaciones avanzadas y priorización más útil.
+                      </p>
+
+                      <Link
+                        href="/pricing"
+                        className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        Desbloquear mi análisis completo
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -517,7 +775,7 @@ function ResultsPageContent() {
           <p className="mt-2 text-slate-600">
             {advancedAIEnabled
               ? "Ordenadas según la prioridad estimada para tu perfil actual."
-              : "La priorización inteligente de recomendaciones está disponible en los planes Pro y Premium."}
+              : "Te mostramos una vista inicial. La priorización inteligente completa está disponible en los planes Pro y Premium."}
           </p>
         </div>
 
@@ -528,72 +786,97 @@ function ResultsPageContent() {
                 Cargando beneficios de tu plan...
               </p>
             </div>
-          ) : advancedAIEnabled ? (
+          ) : visibleSmartRecommendations.length > 0 ? (
             <div className="space-y-4">
-              {gatedRecommendations.length > 0 ? (
-                gatedRecommendations.map((item, index) => (
-                  <div
-                    key={index}
-                    className="rounded-2xl bg-white p-6 shadow-sm"
-                  >
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-xl font-semibold">{item.name}</h2>
-                          <PriorityBadge value={item.priority} />
-                          <CategoryBadge value={item.category} />
-                        </div>
-
-                        <p className="mt-3 text-slate-600">{item.reason}</p>
-
-                        <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                          <strong>Cómo tomarlo:</strong> {item.schedule}
-                        </div>
-
-                        {item.product && (
-                          <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                            <div className="text-sm text-slate-500">
-                              Producto sugerido
-                            </div>
-                            <div className="mt-1 font-semibold text-slate-900">
-                              {item.product.productName}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-600">
-                              Marca: {item.product.brand}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-600">
-                              Precio estimado: {item.product.price}
-                            </div>
-
-                            <a
-                              href={item.product.buyUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-                            >
-                              Ver producto
-                            </a>
-                          </div>
+              {visibleSmartRecommendations.map((item, index) => (
+                <div key={index} className="rounded-2xl bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-xl font-semibold">{item.name}</h2>
+                        <PriorityBadge value={item.priority} />
+                        <CategoryBadge value={item.category} />
+                        {!advancedAIEnabled && (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                            Vista previa
+                          </span>
                         )}
                       </div>
 
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-white">
-                        {index + 1}
+                      <p className="mt-3 text-slate-600">{item.reason}</p>
+
+                      <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                        <strong>Cómo tomarlo:</strong> {item.schedule}
                       </div>
+
+                      {item.product && (
+                        <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                          <div className="text-sm text-slate-500">
+                            Producto sugerido
+                          </div>
+                          <div className="mt-1 font-semibold text-slate-900">
+                            {item.product.productName}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-600">
+                            Marca: {item.product.brand}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-600">
+                            Precio estimado: {item.product.price}
+                          </div>
+
+                          <a
+                            href={item.product.buyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                          >
+                            Ver producto
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-white">
+                      {index + 1}
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                  <h2 className="text-xl font-semibold">
-                    No encontramos recomendaciones
-                  </h2>
-                  <p className="mt-2 text-slate-600">
-                    Completa correctamente el cuestionario para generar
-                    sugerencias.
-                  </p>
+                </div>
+              ))}
+
+              {!advancedAIEnabled && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        {hiddenSmartRecommendationsCount > 0
+                          ? `Hay ${hiddenSmartRecommendationsCount} recomendaciones más esperando por ti`
+                          : "Tu análisis completo puede ir mucho más allá"}
+                      </h3>
+                      <p className="mt-2 text-slate-600">
+                        Actualiza tu plan para ver priorización completa,
+                        recomendaciones más profundas y una lectura mucho más
+                        accionable.
+                      </p>
+                    </div>
+
+                    <Link
+                      href="/pricing"
+                      className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+                    >
+                      Acceder al análisis completo
+                    </Link>
+                  </div>
                 </div>
               )}
+            </div>
+          ) : advancedAIEnabled ? (
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">
+                No encontramos recomendaciones
+              </h2>
+              <p className="mt-2 text-slate-600">
+                Completa correctamente el cuestionario para generar sugerencias.
+              </p>
             </div>
           ) : (
             <>
