@@ -14,13 +14,21 @@ import UpgradePrompt from "../../components/UpgradePrompt";
 
 const totalSteps = 5;
 
+type QuizFormData = {
+  age: string;
+  sex: string;
+  stress: string;
+  sleep: string;
+  goal: string;
+};
+
 export default function QuizPage() {
   const router = useRouter();
 
   const [step, setStep] = useState(1);
   const [plan, setPlan] = useState<PlanType>("free");
   const [planLoading, setPlanLoading] = useState(true);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<QuizFormData>({
     age: "",
     sex: "",
     stress: "",
@@ -117,15 +125,38 @@ export default function QuizPage() {
     return "Tu objetivo define hacia dónde se orienta la interpretación de tu resultado.";
   }, [step]);
 
+  const previewNarrative = useMemo(() => {
+    if (planLoading) {
+      return "Cargando experiencia del quiz...";
+    }
+
+    if (plan === "premium") {
+      return "Este flujo está conectado con la experiencia más profunda disponible dentro de VitaSmart AI.";
+    }
+
+    if (plan === "pro") {
+      return "Tu resultado ya entrará con una capa más fuerte de profundidad y utilidad práctica.";
+    }
+
+    return "Este quiz te dará una base clara. La diferencia es que en Pro o Premium esa misma base se convierte en una lectura mucho más poderosa.";
+  }, [plan, planLoading]);
+
+  function isCurrentStepValid() {
+    if (step === 1) return Boolean(formData.age.trim());
+    if (step === 2) return Boolean(formData.sex);
+    if (step === 3) return Boolean(formData.stress);
+    if (step === 4) return Boolean(formData.sleep);
+    if (step === 5) return Boolean(formData.goal);
+    return false;
+  }
+
+  const canContinue = isCurrentStepValid();
+
   const handleNext = () => {
-    if (step === 1 && !formData.age) return;
-    if (step === 2 && !formData.sex) return;
-    if (step === 3 && !formData.stress) return;
-    if (step === 4 && !formData.sleep) return;
-    if (step === 5 && !formData.goal) return;
+    if (!canContinue) return;
 
     if (step < totalSteps) {
-      setStep(step + 1);
+      setStep((prev) => prev + 1);
       return;
     }
 
@@ -142,7 +173,7 @@ export default function QuizPage() {
 
   const handleBack = () => {
     if (step > 1) {
-      setStep(step - 1);
+      setStep((prev) => prev - 1);
     }
   };
 
@@ -278,12 +309,14 @@ export default function QuizPage() {
               >
                 <input
                   type="number"
+                  min="1"
+                  max="120"
                   value={formData.age}
                   onChange={(e) =>
                     setFormData({ ...formData, age: e.target.value })
                   }
                   placeholder="Ejemplo: 48"
-                  className="w-full rounded-xl border border-slate-300 p-4 text-lg"
+                  className="w-full rounded-xl border border-slate-300 p-4 text-lg outline-none transition focus:border-slate-900"
                 />
               </StepCard>
             )}
@@ -437,6 +470,15 @@ export default function QuizPage() {
             </div>
           )}
 
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="text-sm font-semibold text-slate-900">
+              Vista rápida del flujo
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {previewNarrative}
+            </p>
+          </div>
+
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-between">
             <button
               type="button"
@@ -450,7 +492,8 @@ export default function QuizPage() {
             <button
               type="button"
               onClick={handleNext}
-              className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700"
+              disabled={!canContinue}
+              className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {step === totalSteps
                 ? plan === "free"

@@ -161,7 +161,7 @@ function ResultsPageContent() {
         if (!response.ok) {
           throw new Error(
             data?.upgradeMessage ||
-              (data as any).error ||
+              (data as { error?: string }).error ||
               "No se pudo generar el análisis."
           );
         }
@@ -213,15 +213,11 @@ function ResultsPageContent() {
             );
 
             if (saveResult.saved) {
-              if (backendAppliedAiMode === "advanced") {
-                setSaveNotice(
-                  "Análisis avanzado guardado correctamente en tu historial."
-                );
-              } else {
-                setSaveNotice(
-                  "Análisis base guardado correctamente en tu historial."
-                );
-              }
+              setSaveNotice(
+                backendAppliedAiMode === "advanced"
+                  ? "Análisis avanzado guardado correctamente en tu historial."
+                  : "Análisis base guardado correctamente en tu historial."
+              );
             }
 
             if (!saveResult.saved && saveResult.reason === "no-user") {
@@ -901,9 +897,9 @@ function ResultsPageContent() {
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border p-3">
-      <div className="text-sm text-gray-500">{label}</div>
-      <div className="font-semibold">{value || "-"}</div>
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="text-sm text-slate-500">{label}</div>
+      <div className="font-semibold text-slate-900">{value || "-"}</div>
     </div>
   );
 }

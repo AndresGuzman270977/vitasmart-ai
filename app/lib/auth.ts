@@ -1,16 +1,30 @@
-import { supabase } from "./supabase";
+import { supabase } from "../lib/supabase";
+
+function sanitizeEmail(email: string) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function sanitizePassword(password: string) {
+  return String(password || "");
+}
 
 export async function signUpWithEmail(email: string, password: string) {
+  const safeEmail = sanitizeEmail(email);
+  const safePassword = sanitizePassword(password);
+
   return await supabase.auth.signUp({
-    email,
-    password,
+    email: safeEmail,
+    password: safePassword,
   });
 }
 
 export async function signInWithEmail(email: string, password: string) {
+  const safeEmail = sanitizeEmail(email);
+  const safePassword = sanitizePassword(password);
+
   return await supabase.auth.signInWithPassword({
-    email,
-    password,
+    email: safeEmail,
+    password: safePassword,
   });
 }
 
@@ -19,27 +33,55 @@ export async function signOutUser() {
 }
 
 export async function getCurrentUser() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
-  if (error) {
+    if (error) {
+      console.error("Error getting current user:", error.message);
+      return null;
+    }
+
+    return user ?? null;
+  } catch (error: any) {
+    console.error(
+      "Unexpected error getting current user:",
+      error?.message || error
+    );
     return null;
   }
-
-  return user;
 }
 
 export async function getCurrentSession() {
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
 
-  if (error) {
+    if (error) {
+      console.error("Error getting current session:", error.message);
+      return null;
+    }
+
+    return session ?? null;
+  } catch (error: any) {
+    console.error(
+      "Unexpected error getting current session:",
+      error?.message || error
+    );
     return null;
   }
+}
 
-  return session;
+export async function requireCurrentUser() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error("No hay un usuario autenticado.");
+  }
+
+  return user;
 }

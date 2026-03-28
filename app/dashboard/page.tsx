@@ -217,8 +217,9 @@ export default function DashboardPage() {
     if (subscriptionStatus === "past_due") return "Pago pendiente";
     if (subscriptionStatus === "payment_failed") return "Pago fallido";
     if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed")
+    if (subscriptionStatus === "checkout_completed") {
       return "Procesando activación";
+    }
 
     return subscriptionStatus;
   }, [subscriptionStatus, cancelAtPeriodEnd]);
@@ -273,6 +274,22 @@ export default function DashboardPage() {
     if (!latest || bestScore === null) return null;
     return Math.max(bestScore - latest.score, 0);
   }, [latest, bestScore]);
+
+  const dashboardNarrative = useMemo(() => {
+    if (!userPlan) {
+      return "Este panel está pensado para darte claridad y ayudarte a convertir cada análisis en una herramienta de seguimiento real.";
+    }
+
+    if (userPlan === "free") {
+      return "Estás viendo una versión útil del dashboard. Pro y Premium lo convierten en una herramienta mucho más profunda y accionable.";
+    }
+
+    if (userPlan === "pro") {
+      return "Ya tienes una base sólida. Premium es el siguiente salto si quieres máxima continuidad y una experiencia más refinada.";
+    }
+
+    return "Ya estás en la versión más completa del dashboard, con la capa más profunda disponible dentro del ecosistema VitaSmart AI.";
+  }, [userPlan]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -354,6 +371,15 @@ export default function DashboardPage() {
                 tu estado actual, tu evolución reciente y las señales que más
                 conviene seguir de cerca.
               </p>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Lectura rápida de tu experiencia actual
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {dashboardNarrative}
+                </p>
+              </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 {userPlan && (
@@ -520,7 +546,7 @@ export default function DashboardPage() {
 
               <MetricCard
                 title="Mejor score"
-                value={bestScore !== null ? `${bestScore}` : "-"}
+                value={bestScore !== null ? `${bestScore}/100` : "-"}
                 subtitle="Tu punto más alto registrado"
               />
             </section>

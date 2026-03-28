@@ -171,8 +171,9 @@ export default function MarketplacePage() {
     if (subscriptionStatus === "past_due") return "Pago pendiente";
     if (subscriptionStatus === "payment_failed") return "Pago fallido";
     if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed")
+    if (subscriptionStatus === "checkout_completed") {
       return "Procesando activación";
+    }
     return subscriptionStatus;
   }, [subscriptionStatus]);
 
@@ -250,6 +251,20 @@ export default function MarketplacePage() {
   const canShowUpgradePrompt = plan !== "premium";
   const hasAssessmentForRanking = Boolean(latestAssessment);
 
+  const experienceNarrative = useMemo(() => {
+    if (plan === "premium") {
+      return "Ya estás en la versión más completa del marketplace, con la capa más profunda de personalización disponible.";
+    }
+
+    if (plan === "pro") {
+      return hasAssessmentForRanking
+        ? "Tu marketplace ya se siente mucho más útil porque el orden empieza a responder a tu perfil."
+        : "Tu plan ya permite una experiencia más inteligente. En cuanto tengas un análisis reciente, el catálogo podrá ordenarse con más intención.";
+    }
+
+    return "Tu experiencia actual te deja explorar el catálogo, pero todavía no convierte la tienda en una herramienta realmente personalizada.";
+  }, [plan, hasAssessmentForRanking]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-6xl">
@@ -300,6 +315,15 @@ export default function MarketplacePage() {
             </p>
           </div>
 
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="text-sm font-semibold text-slate-900">
+              Lectura rápida del nivel de experiencia
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {experienceNarrative}
+            </p>
+          </div>
+
           {smartMarketplaceEnabled && latestAssessment ? (
             <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
               Estás viendo recomendaciones priorizadas según tu último análisis:
@@ -333,7 +357,8 @@ export default function MarketplacePage() {
 
               {nextRecommendedPlan && (
                 <div className="mt-2">
-                  Próximo salto recomendado: <strong>{nextRecommendedPlan}</strong>.
+                  Próximo salto recomendado:{" "}
+                  <strong>{nextRecommendedPlan}</strong>.
                 </div>
               )}
 
@@ -393,7 +418,7 @@ export default function MarketplacePage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Ej: Omega, magnesio, energía..."
-                className="mt-2 w-full rounded-xl border border-slate-300 p-3"
+                className="mt-2 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
               />
             </div>
 
@@ -404,7 +429,7 @@ export default function MarketplacePage() {
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as CategoryFilter)}
-                className="mt-2 w-full rounded-xl border border-slate-300 p-3"
+                className="mt-2 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
               >
                 <option value="all">Todas</option>
                 <option value="energy">Energía</option>
@@ -422,7 +447,7 @@ export default function MarketplacePage() {
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as PriorityFilter)}
-                className="mt-2 w-full rounded-xl border border-slate-300 p-3"
+                className="mt-2 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
               >
                 <option value="all">Todas</option>
                 <option value="high">Alta</option>

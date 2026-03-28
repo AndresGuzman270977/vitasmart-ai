@@ -36,6 +36,12 @@ type HealthAssessment = {
   user_id?: string | null;
 };
 
+type ChartPoint = {
+  name: string;
+  score: number;
+  fecha: string;
+};
+
 export default function HistoryPage() {
   const [items, setItems] = useState<HealthAssessment[]>([]);
   const [allItemsCount, setAllItemsCount] = useState(0);
@@ -131,19 +137,22 @@ export default function HistoryPage() {
     };
   }, []);
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo<ChartPoint[]>(() => {
     return [...items]
       .slice()
       .reverse()
       .map((item, index) => ({
         name: `Análisis ${index + 1}`,
-        score: item.score,
+        score: Number(item.score || 0),
         fecha: formatDate(item.created_at),
       }));
   }, [items]);
 
-  const latestScore = items[0]?.score ?? null;
-  const previousScore = items[1]?.score ?? null;
+  const latest = items[0] ?? null;
+  const previous = items[1] ?? null;
+
+  const latestScore = latest?.score ?? null;
+  const previousScore = previous?.score ?? null;
 
   const scoreDelta =
     latestScore !== null && previousScore !== null
@@ -209,6 +218,18 @@ export default function HistoryPage() {
 
   const isHistoryTrimmed = allItemsCount > items.length;
 
+  const historyNarrative = useMemo(() => {
+    if (plan === "premium") {
+      return "Estás viendo la versión más completa del historial, con la mayor continuidad disponible dentro de VitaSmart AI.";
+    }
+
+    if (plan === "pro") {
+      return "Tu historial ya tiene una buena profundidad. Premium es el siguiente salto si quieres máxima continuidad y una lectura todavía más rica de tu evolución.";
+    }
+
+    return "Tu historial actual ya aporta valor, pero está limitado. Pro y Premium convierten esta sección en una herramienta mucho más útil para detectar patrones reales.";
+  }, [plan]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-5xl">
@@ -225,6 +246,17 @@ export default function HistoryPage() {
             Aquí puedes ver tus análisis guardados, detectar cambios y construir
             una visión más clara de tu progreso con el tiempo.
           </p>
+
+          {!needsLogin && (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">
+                Lectura rápida de tu experiencia actual
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {historyNarrative}
+              </p>
+            </div>
+          )}
 
           {!needsLogin && (
             <div className="mt-4 flex flex-wrap gap-3">
@@ -355,7 +387,7 @@ export default function HistoryPage() {
             <div className="mt-8 grid gap-6 md:grid-cols-5">
               <MetricCard
                 title="Último score"
-                value={latestScore !== null ? `${latestScore}` : "-"}
+                value={latestScore !== null ? `${latestScore}/100` : "-"}
                 subtitle="Tu resultado más reciente"
               />
 
@@ -389,7 +421,7 @@ export default function HistoryPage() {
 
               <MetricCard
                 title="Mejor score"
-                value={bestScore !== null ? `${bestScore}` : "-"}
+                value={bestScore !== null ? `${bestScore}/100` : "-"}
                 subtitle="Tu punto más alto visible"
               />
             </div>
@@ -422,13 +454,32 @@ export default function HistoryPage() {
                 <div className="mt-6 h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis domain={[40, 100]} />
-                      <Tooltip />
+                      <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        domain={[40, 100]}
+                        tick={{ fontSize: 12, fill: "#64748b" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`${value}/100`, "Health Score"]}
+                        labelFormatter={(label, payload) => {
+                          const point = payload?.[0]?.payload as
+                            | ChartPoint
+                            | undefined;
+                          return point?.fecha || label;
+                        }}
+                      />
                       <Line
                         type="monotone"
                         dataKey="score"
+                        stroke="#0f172a"
                         strokeWidth={3}
                         dot={{ r: 4 }}
                         activeDot={{ r: 6 }}
@@ -487,6 +538,12 @@ export default function HistoryPage() {
                             {index === 0 && (
                               <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
                                 Más reciente
+                              </span>
+                            )}
+
+                            {index === items.length - 1 && items.length > 1 && (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                Más antiguo visible
                               </span>
                             )}
                           </div>

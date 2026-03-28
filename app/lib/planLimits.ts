@@ -20,7 +20,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     marketplaceMode: "smart",
   },
   premium: {
-    historyLimit: Infinity,
+    historyLimit: Number.POSITIVE_INFINITY,
     advancedAI: true,
     marketplaceMode: "premium",
   },
@@ -44,6 +44,10 @@ export function normalizePlan(plan?: string | null): PlanType {
 
 export function getPlanLimits(plan: PlanType): PlanLimits {
   return PLAN_LIMITS[normalizePlan(plan)];
+}
+
+export function getPlanRank(plan: PlanType): number {
+  return PLAN_ORDER[normalizePlan(plan)];
 }
 
 export function canSaveMoreAnalyses(
@@ -71,16 +75,16 @@ export function isPremiumPlan(plan: PlanType): boolean {
   return normalizePlan(plan) === "premium";
 }
 
-export function isProOrHigher(plan: PlanType): boolean {
-  return getPlanRank(plan) >= PLAN_ORDER.pro;
+export function isProPlan(plan: PlanType): boolean {
+  return normalizePlan(plan) === "pro";
 }
 
 export function isFreePlan(plan: PlanType): boolean {
   return normalizePlan(plan) === "free";
 }
 
-export function getPlanRank(plan: PlanType): number {
-  return PLAN_ORDER[normalizePlan(plan)];
+export function isProOrHigher(plan: PlanType): boolean {
+  return getPlanRank(plan) >= PLAN_ORDER.pro;
 }
 
 export function isSameOrHigherPlan(
@@ -110,6 +114,10 @@ export function getPlanLabel(plan: PlanType): string {
   return "Free";
 }
 
+export function getPlanShortLabel(plan: PlanType): string {
+  return getPlanLabel(plan);
+}
+
 export function getUpgradeTargetLabel(plan: PlanType): string {
   const nextPlan = getNextPlan(plan);
 
@@ -125,4 +133,26 @@ export function getHistoryLimitLabel(plan: PlanType): string {
   }
 
   return String(limits.historyLimit);
+}
+
+export function getPlanMarketingDescription(plan: PlanType): string {
+  const normalized = normalizePlan(plan);
+
+  if (normalized === "premium") {
+    return "La experiencia más completa, profunda y refinada.";
+  }
+
+  if (normalized === "pro") {
+    return "Más inteligencia, más seguimiento y más utilidad real.";
+  }
+
+  return "La puerta de entrada para empezar y descubrir valor.";
+}
+
+export function getPlanCtaLabel(plan: PlanType): string {
+  const normalized = normalizePlan(plan);
+
+  if (normalized === "premium") return "Ir a Premium";
+  if (normalized === "pro") return "Desbloquear Pro";
+  return "Empezar gratis";
 }

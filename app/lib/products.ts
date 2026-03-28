@@ -33,6 +33,18 @@ export const PRODUCTS: Product[] = [
       "Multivitamínico formulado para cubrir micronutrientes clave en hombres mayores de 40 años, útil como apoyo general de bienestar.",
   },
   {
+    slug: "general-multivitamin-support",
+    supplementName: "Multivitamínico de soporte general",
+    brand: "Centrum",
+    productName: "Centrum Adult Multivitamin",
+    price: "USD 14 - 24",
+    buyUrl: "https://www.amazon.com/",
+    category: "general",
+    priority: "medium",
+    description:
+      "Opción orientada a soporte nutricional general, útil como base para complementar hábitos de bienestar diario.",
+  },
+  {
     slug: "magnesium-glycinate",
     supplementName: "Magnesio glicinato",
     brand: "Doctor's Best",
@@ -55,6 +67,18 @@ export const PRODUCTS: Product[] = [
     priority: "high",
     description:
       "Opción orientada a descanso y recuperación, especialmente útil en perfiles con sueño insuficiente o fatiga acumulada.",
+  },
+  {
+    slug: "melatonin-occasional-support",
+    supplementName: "Melatonina de apoyo ocasional",
+    brand: "Natrol",
+    productName: "Melatonin Fast Dissolve",
+    price: "USD 10 - 18",
+    buyUrl: "https://www.amazon.com/",
+    category: "sleep",
+    priority: "medium",
+    description:
+      "Apoyo de uso ocasional enfocado en la rutina nocturna y en perfiles donde el descanso necesita más estructura.",
   },
   {
     slug: "ashwagandha",
@@ -116,4 +140,73 @@ export const PRODUCTS: Product[] = [
     description:
       "Vitamina clave para bienestar general, especialmente relevante cuando hay baja exposición solar o necesidad de soporte integral.",
   },
+  {
+    slug: "l-theanine",
+    supplementName: "L-Teanina",
+    brand: "NOW Foods",
+    productName: "L-Theanine 200 mg",
+    price: "USD 16 - 24",
+    buyUrl: "https://www.amazon.com/",
+    category: "focus",
+    priority: "medium",
+    description:
+      "Suplemento frecuentemente considerado cuando se busca una sensación de enfoque más estable y una carga mental más ordenada.",
+  },
+  {
+    slug: "rhodiola",
+    supplementName: "Rhodiola rosea",
+    brand: "Gaia Herbs",
+    productName: "Rhodiola Rosea",
+    price: "USD 18 - 30",
+    buyUrl: "https://www.amazon.com/",
+    category: "energy",
+    priority: "medium",
+    description:
+      "Opción utilizada en contextos de fatiga mental o física cuando se busca apoyo adaptativo para sostener energía y rendimiento.",
+  },
+  {
+    slug: "glycine",
+    supplementName: "Glicina",
+    brand: "BulkSupplements",
+    productName: "Glycine Powder",
+    price: "USD 14 - 22",
+    buyUrl: "https://www.amazon.com/",
+    category: "sleep",
+    priority: "medium",
+    description:
+      "Ingrediente que suele aparecer en rutinas orientadas a descanso y recuperación cuando se busca una noche más estructurada.",
+  },
+  {
+    slug: "electrolytes",
+    supplementName: "Electrolitos de soporte diario",
+    brand: "LMNT",
+    productName: "Electrolyte Drink Mix",
+    price: "USD 35 - 45",
+    buyUrl: "https://www.amazon.com/",
+    category: "energy",
+    priority: "low",
+    description:
+      "Apoyo complementario para hidratación y sensación de energía más estable, especialmente en perfiles con desgaste diario o baja recuperación.",
+  },
+  {
+    slug: "probiotic-general",
+    supplementName: "Probiótico de soporte general",
+    brand: "Culturelle",
+    productName: "Daily Probiotic",
+    price: "USD 20 - 32",
+    buyUrl: "https://www.amazon.com/",
+    category: "general",
+    priority: "low",
+    description:
+      "Opción orientada a soporte general de bienestar, útil dentro de una estrategia más amplia de hábitos y cuidado integral.",
+  },
 ];
+
+export function getProductBySlug(slug: string): Product | undefined {
+  const normalizedSlug = String(slug || "").trim().toLowerCase();
+  return PRODUCTS.find((product) => product.slug === normalizedSlug);
+}
+
+export function getProductsByCategory(category: ProductCategory): Product[] {
+  return PRODUCTS.filter((product) => product.category === category);
+}

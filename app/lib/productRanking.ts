@@ -17,56 +17,154 @@ export function rankProductsForAssessment(
   profile: AssessmentProfile
 ): RankedProduct[] {
   const age = Number(profile.age || 0);
+  const sex = String(profile.sex || "").trim();
+  const stress = String(profile.stress || "").trim();
+  const sleep = String(profile.sleep || "").trim();
+  const goal = String(profile.goal || "").trim();
 
   const ranked = PRODUCTS.map((product) => {
     let rankScore = 0;
     const reasons: string[] = [];
 
-    // Reglas por objetivo principal
-    if (profile.goal === "energy" && product.category === "energy") {
-      rankScore += 40;
-      reasons.push("alineado con tu objetivo de energía");
+    if (goal === "energy" && product.category === "energy") {
+      rankScore += 42;
+      reasons.push("alineado con tu objetivo principal de energía");
     }
 
-    if (profile.goal === "focus" && product.category === "focus") {
-      rankScore += 40;
-      reasons.push("alineado con tu objetivo de concentración");
+    if (goal === "focus" && product.category === "focus") {
+      rankScore += 42;
+      reasons.push("alineado con tu objetivo principal de concentración");
     }
 
-    if (profile.goal === "sleep" && product.category === "sleep") {
-      rankScore += 40;
-      reasons.push("alineado con tu objetivo de sueño");
+    if (goal === "sleep" && product.category === "sleep") {
+      rankScore += 42;
+      reasons.push("alineado con tu objetivo principal de descanso");
     }
 
-    if (profile.goal === "health" && product.category === "general") {
-      rankScore += 35;
+    if (goal === "health" && product.category === "general") {
+      rankScore += 38;
       reasons.push("alineado con tu objetivo de salud general");
     }
 
-    // Reglas por estrés
-    if (profile.stress === "high" && product.category === "stress") {
-      rankScore += 35;
-      reasons.push("útil para perfiles con estrés alto");
+    if (goal === "focus" && product.category === "energy") {
+      rankScore += 12;
+      reasons.push("puede complementar energía mental y claridad diaria");
     }
 
-    if (profile.stress === "medium" && product.category === "stress") {
+    if (goal === "energy" && product.category === "general") {
+      rankScore += 10;
+      reasons.push("puede reforzar tu base general de bienestar");
+    }
+
+    if (goal === "sleep" && product.category === "stress") {
+      rankScore += 12;
+      reasons.push("puede ser relevante cuando el descanso se ve afectado por tensión");
+    }
+
+    if (goal === "health" && product.category === "focus") {
+      rankScore += 8;
+      reasons.push("puede aportar apoyo complementario dentro de una estrategia integral");
+    }
+
+    if (goal === "health" && product.category === "sleep") {
+      rankScore += 8;
+      reasons.push("el descanso suele ser una palanca importante para tu bienestar general");
+    }
+
+    if (stress === "high" && product.category === "stress") {
+      rankScore += 34;
+      reasons.push("encaja mejor con perfiles de estrés alto");
+    }
+
+    if (stress === "medium" && product.category === "stress") {
+      rankScore += 18;
+      reasons.push("puede aportar apoyo útil con estrés moderado");
+    }
+
+    if (stress === "high" && product.category === "sleep") {
+      rankScore += 10;
+      reasons.push("el estrés alto puede afectar recuperación y descanso");
+    }
+
+    if (
+      stress === "high" &&
+      goal === "focus" &&
+      product.category === "focus"
+    ) {
+      rankScore += 8;
+      reasons.push("puede tener más sentido cuando el enfoque también sufre por carga mental");
+    }
+
+    if ((sleep === "5" || sleep === "6") && product.category === "sleep") {
+      rankScore += 34;
+      reasons.push("gana prioridad cuando el descanso actual es insuficiente");
+    }
+
+    if (sleep === "5" && product.category === "general") {
+      rankScore += 6;
+      reasons.push("puede acompañar una estrategia general cuando hay fatiga acumulada");
+    }
+
+    if (
+      (sleep === "5" || sleep === "6") &&
+      goal === "energy" &&
+      product.category === "energy"
+    ) {
+      rankScore += 8;
+      reasons.push("puede ser relevante cuando la energía también está limitada por poco descanso");
+    }
+
+    if (
+      age >= 40 &&
+      sex === "male" &&
+      product.supplementName === "Multivitamínico para hombre 40+"
+    ) {
+      rankScore += 26;
+      reasons.push("especialmente alineado con perfiles masculinos mayores de 40");
+    }
+
+    if (
+      age >= 40 &&
+      sex === "female" &&
+      product.supplementName === "Multivitamínico de soporte general"
+    ) {
       rankScore += 20;
-      reasons.push("puede apoyar el manejo de estrés moderado");
+      reasons.push("puede ser una base útil en perfiles adultos que buscan soporte general");
     }
 
-    // Reglas por sueño
-    if ((profile.sleep === "5" || profile.sleep === "6") && product.category === "sleep") {
-      rankScore += 35;
-      reasons.push("apoya recuperación y descanso cuando duermes poco");
+    if (age >= 40 && product.category === "general") {
+      rankScore += 6;
+      reasons.push("la base general de soporte suele ganar importancia con la edad");
     }
 
-    // Reglas por edad
-    if (age >= 40 && product.supplementName === "Multivitamínico para hombre 40+") {
-      rankScore += 25;
-      reasons.push("adecuado para perfiles masculinos mayores de 40");
+    if (goal === "sleep" && product.supplementName === "Magnesio glicinato") {
+      rankScore += 10;
+      reasons.push("es una referencia frecuente cuando la prioridad es descanso nocturno");
     }
 
-    // Bonificación por prioridad del producto en catálogo
+    if (stress === "high" && product.supplementName === "Ashwagandha") {
+      rankScore += 10;
+      reasons.push("suele considerarse cuando la carga mental es una señal dominante");
+    }
+
+    if (goal === "focus" && product.supplementName === "Omega-3") {
+      rankScore += 10;
+      reasons.push("suele aparecer como referencia relevante para soporte cognitivo");
+    }
+
+    if (goal === "energy" && product.supplementName === "CoQ10") {
+      rankScore += 10;
+      reasons.push("suele tener alta afinidad con búsquedas orientadas a energía");
+    }
+
+    if (
+      sleep === "5" &&
+      product.supplementName === "Melatonina de apoyo ocasional"
+    ) {
+      rankScore += 8;
+      reasons.push("puede resultar especialmente coherente cuando el descanso actual es muy corto");
+    }
+
     if (product.priority === "high") {
       rankScore += 15;
     } else if (product.priority === "medium") {
@@ -75,27 +173,30 @@ export function rankProductsForAssessment(
       rankScore += 3;
     }
 
-    // Bonus general por categorías compatibles
-    if (profile.goal === "health" && product.category === "focus") {
-      rankScore += 5;
-    }
-
-    if (profile.goal === "focus" && product.category === "energy") {
-      rankScore += 8;
-    }
-
-    if (profile.goal === "energy" && product.category === "general") {
-      rankScore += 6;
-    }
-
     return {
       ...product,
       rankScore,
-      reasons: uniqueReasons(reasons),
+      reasons: uniqueReasons(reasons).slice(0, 3),
     };
   });
 
-  return ranked.sort((a, b) => b.rankScore - a.rankScore);
+  return ranked.sort((a, b) => {
+    if (b.rankScore !== a.rankScore) {
+      return b.rankScore - a.rankScore;
+    }
+
+    const priorityRank: Record<Product["priority"], number> = {
+      high: 1,
+      medium: 2,
+      low: 3,
+    };
+
+    if (priorityRank[a.priority] !== priorityRank[b.priority]) {
+      return priorityRank[a.priority] - priorityRank[b.priority];
+    }
+
+    return a.productName.localeCompare(b.productName);
+  });
 }
 
 function uniqueReasons(reasons: string[]) {

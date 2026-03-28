@@ -61,7 +61,7 @@ export default function LoginPage() {
         }
 
         setMessage(
-          "Cuenta creada. Si la confirmación de email está activa, revisa tu correo antes de iniciar sesión."
+          "Cuenta creada. Si la confirmación de correo está activa, revisa tu email antes de iniciar sesión."
         );
       } else {
         const { error } = await signInWithEmail(email, password);
@@ -84,8 +84,14 @@ export default function LoginPage() {
 
   const subheadline = useMemo(() => {
     return mode === "login"
-      ? "Entra a tu dashboard, revisa tu progreso y sigue construyendo una versión más fuerte y consciente de tu salud."
-      : "Empieza gratis, guarda tu historial y desbloquea una experiencia de salud preventiva mucho más inteligente.";
+      ? "Entra a tu dashboard, revisa tu progreso y sigue construyendo una versión más fuerte y más consciente de tu salud."
+      : "Empieza gratis, guarda tu historial y prepárate para desbloquear una experiencia mucho más valiosa.";
+  }, [mode]);
+
+  const authNarrative = useMemo(() => {
+    return mode === "login"
+      ? "Tu cuenta conecta tu análisis, tu historial y tu progreso dentro de una sola experiencia continua."
+      : "Crear tu cuenta convierte un análisis puntual en una experiencia con memoria, seguimiento y más valor a lo largo del tiempo.";
   }, [mode]);
 
   if (checkingSession) {
@@ -110,12 +116,11 @@ export default function LoginPage() {
                 VitaSmart AI
               </div>
               <h2 className="mt-4 text-3xl font-bold">
-                Tu salud puede mejorar cuando entiendes tus patrones
+                Tu salud mejora cuando entiendes mejor tus patrones
               </h2>
               <p className="mt-4 leading-7 text-slate-300">
                 Health Score, historial, recomendaciones inteligentes y una
-                experiencia premium pensada para ayudarte a progresar con
-                claridad.
+                experiencia pensada para ayudarte a progresar con claridad.
               </p>
             </div>
           </div>
@@ -137,6 +142,15 @@ export default function LoginPage() {
 
             <p className="mt-3 text-slate-600">{subheadline}</p>
 
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">
+                Qué ganas al entrar
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {authNarrative}
+              </p>
+            </div>
+
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700">
@@ -144,11 +158,12 @@ export default function LoginPage() {
                 </label>
                 <input
                   type="email"
-                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tucorreo@ejemplo.com"
                   required
+                  autoComplete="email"
                 />
               </div>
 
@@ -158,18 +173,21 @@ export default function LoginPage() {
                 </label>
                 <input
                   type="password"
-                  className="mt-1 w-full rounded-xl border border-slate-300 p-3"
+                  className="mt-1 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Mínimo 6 caracteres"
                   required
+                  autoComplete={
+                    mode === "login" ? "current-password" : "new-password"
+                  }
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl bg-slate-900 py-3 font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+                className="w-full rounded-xl bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
               >
                 {loading
                   ? "Procesando..."
@@ -239,7 +257,7 @@ export default function LoginPage() {
               <p className="mt-4 leading-7 text-slate-600">
                 Incluso si empiezas en Free, tu cuenta te permite guardar tu
                 avance, construir historial y estar listo para pasar a una
-                experiencia mucho más poderosa cuando quieras.
+                experiencia mucho más completa cuando quieras.
               </p>
 
               <div className="mt-6 grid gap-3">

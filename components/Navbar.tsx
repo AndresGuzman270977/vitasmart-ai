@@ -211,8 +211,9 @@ export default function Navbar() {
     if (subscriptionStatus === "past_due") return "Pago pendiente";
     if (subscriptionStatus === "payment_failed") return "Pago fallido";
     if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed")
+    if (subscriptionStatus === "checkout_completed") {
       return "Procesando activación";
+    }
 
     return subscriptionStatus;
   })();
@@ -322,7 +323,7 @@ export default function Navbar() {
                         Mejora tu experiencia
                       </div>
                       <p className="mt-2 text-sm text-slate-600">
-                        Desbloquea IA avanzada, historial ampliado y marketplace
+                        Desbloquea IA avanzada, más historial y marketplace
                         inteligente.
                       </p>
                       <Link
@@ -331,6 +332,25 @@ export default function Navbar() {
                         className="mt-3 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
                       >
                         Ver planes
+                      </Link>
+                    </div>
+                  )}
+
+                  {userPlan === "pro" && (
+                    <div className="border-t border-slate-100 px-3 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Siguiente salto recomendado
+                      </div>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Premium te da una experiencia más completa y más
+                        refinada.
+                      </p>
+                      <Link
+                        href="/pricing"
+                        onClick={() => setMenuOpen(false)}
+                        className="mt-3 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        Pasar a Premium
                       </Link>
                     </div>
                   )}

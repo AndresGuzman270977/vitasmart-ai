@@ -86,7 +86,7 @@ export default async function ProductDetailPage({
               <div className="mt-4 grid gap-3">
                 <ReasonRow text="Encaja dentro de una categoría relevante de bienestar." />
                 <ReasonRow text="Puede alinearse con objetivos como energía, enfoque, sueño o manejo del estrés." />
-                <ReasonRow text="Ayuda a que el usuario compare opciones dentro de una experiencia más estructurada." />
+                <ReasonRow text="Ayuda a comparar opciones dentro de una experiencia más estructurada." />
               </div>
             </div>
 

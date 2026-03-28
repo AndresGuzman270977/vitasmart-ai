@@ -501,6 +501,7 @@ function PricingPageContent() {
     : "Pro";
   const highlightResultsIntent =
     checkoutPlan === "pro" || checkoutPlan === "premium";
+
   const heroTitle = currentPlan
     ? currentPlan === "free"
       ? "Desbloquea una versión mucho más profunda de tu análisis"
@@ -516,6 +517,22 @@ function PricingPageContent() {
       ? "Pro ya desbloquea mucho valor. Premium es el siguiente salto si quieres máxima continuidad, mayor profundidad y una experiencia más refinada."
       : "Premium te da la capa más completa del ecosistema VitaSmart AI, con máxima profundidad, continuidad y personalización."
     : "Free te permite descubrir la plataforma. Pro convierte la experiencia en seguimiento real. Premium desbloquea la versión más completa, profunda y personalizada de VitaSmart AI.";
+
+  const currentPlanNarrative = useMemo(() => {
+    if (!currentPlan) {
+      return "Inicia sesión para ver tu estado actual y gestionar tu experiencia.";
+    }
+
+    if (currentPlan === "free") {
+      return "Tu cuenta actual está en la capa de entrada. Ya puedes descubrir valor, pero Pro y Premium desbloquean una experiencia mucho más útil.";
+    }
+
+    if (currentPlan === "pro") {
+      return "Ya tienes una experiencia sólida. Premium es el siguiente salto si buscas máxima profundidad, continuidad y refinamiento.";
+    }
+
+    return "Ya estás en la capa más completa de VitaSmart AI. Aquí tienes la versión con mayor profundidad disponible.";
+  }, [currentPlan]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -551,6 +568,10 @@ function PricingPageContent() {
                 <div className="text-sm text-slate-600">
                   Estado de suscripción:{" "}
                   <strong>{subscriptionStatusLabel}</strong>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                  {currentPlanNarrative}
                 </div>
 
                 {currentPlan !== "premium" && (
@@ -705,7 +726,7 @@ function PricingPageContent() {
                 : currentPlan === "pro"
                 ? "Plan actual"
                 : hasPaidPlan
-                ? "Cambiar desde controles superiores"
+                ? "Gestionar desde arriba"
                 : "Desbloquear Pro"
             }
             secondaryLabel="Mejor equilibrio entre precio y valor"
@@ -738,7 +759,7 @@ function PricingPageContent() {
                 : currentPlan === "premium"
                 ? "Plan actual"
                 : hasPaidPlan
-                ? "Cambiar desde controles superiores"
+                ? "Gestionar desde arriba"
                 : "Ir a Premium"
             }
             secondaryLabel="Máximo valor para usuarios intensivos"
@@ -1061,7 +1082,11 @@ function BenefitPanel({
       }`}
     >
       <h2 className="text-2xl font-bold">{title}</h2>
-      <p className={`mt-4 leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>
+      <p
+        className={`mt-4 leading-7 ${
+          dark ? "text-slate-300" : "text-slate-600"
+        }`}
+      >
         {description}
       </p>
 

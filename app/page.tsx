@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./lib/supabase";
 import {
+  getHistoryLimitLabel,
   getPlanLabel,
   getPlanLimits,
   normalizePlan,
@@ -155,11 +156,24 @@ export default function HomePage() {
     if (subscriptionStatus === "past_due") return "Pago pendiente";
     if (subscriptionStatus === "payment_failed") return "Pago fallido";
     if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed")
+    if (subscriptionStatus === "checkout_completed") {
       return "Procesando activación";
+    }
 
     return subscriptionStatus;
   }, [subscriptionStatus, cancelAtPeriodEnd]);
+
+  const homeNarrative = useMemo(() => {
+    if (currentPlan === "premium") {
+      return "Ya estás en la experiencia más completa de VitaSmart AI, con máxima profundidad, continuidad y personalización.";
+    }
+
+    if (currentPlan === "pro") {
+      return "Ya tienes una experiencia sólida. Premium es el siguiente salto si quieres una capa todavía más completa y refinada.";
+    }
+
+    return "Empiezas con valor desde el primer análisis. Luego puedes escalar hacia una experiencia mucho más útil y profunda.";
+  }, [currentPlan]);
 
   if (checkingSession) {
     return (
@@ -217,21 +231,30 @@ export default function HomePage() {
 
             <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
               Tu Health Score en menos de 60 segundos.
-              <span className="block">Entiende tu salud.</span>
-              <span className="block">Mejora tus hábitos.</span>
+              <span className="block">Entiende tu punto de partida.</span>
+              <span className="block">Mejora con continuidad.</span>
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
               VitaSmart AI convierte tu perfil actual en un sistema de mejora
               continua: Health Score, análisis inteligente, historial,
-              recomendaciones personalizadas y una experiencia premium diseñada
-              para ayudarte a progresar de verdad.
+              recomendaciones personalizadas y una experiencia diseñada para
+              ayudarte a progresar de verdad.
             </p>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-sm font-semibold text-slate-900">
+                Cómo se siente la experiencia VitaSmart AI
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {homeNarrative}
+              </p>
+            </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <HeroPill text="Free para empezar hoy" />
               <HeroPill text="Pro para seguimiento real" />
-              <HeroPill text="Premium para máximo control" />
+              <HeroPill text="Premium para máxima profundidad" />
             </div>
 
             <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -292,7 +315,7 @@ export default function HomePage() {
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
                 <HeroStat
                   label="Health Score"
-                  value="72"
+                  value="72/100"
                   note="Ejemplo realista"
                 />
                 <HeroStat
@@ -326,7 +349,7 @@ export default function HomePage() {
               <div className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
                 <p>
                   <strong className="text-white">Free</strong> permite descubrir
-                  la plataforma.
+                  la plataforma y obtener una lectura inicial útil.
                 </p>
                 <p>
                   <strong className="text-white">Pro</strong> convierte la
@@ -335,7 +358,7 @@ export default function HomePage() {
                 </p>
                 <p>
                   <strong className="text-white">Premium</strong> desbloquea la
-                  versión más completa, profunda y personalizada de la app.
+                  versión más completa, más continua y más refinada de la app.
                 </p>
               </div>
             </div>
@@ -350,9 +373,8 @@ export default function HomePage() {
               Empieza gratis. Siente el valor. Mejora cuando quieras escalar.
             </h2>
             <p className="mt-4 text-slate-600">
-              La estructura de VitaSmart AI está pensada para que el usuario
-              gane claridad desde el primer análisis y quiera avanzar hacia una
-              experiencia más profunda.
+              VitaSmart AI está diseñada para que ganes claridad desde el primer
+              análisis y puedas evolucionar hacia una experiencia más profunda.
             </p>
           </div>
 
@@ -370,7 +392,7 @@ export default function HomePage() {
             <StepCard
               step="03"
               title="Escala a una experiencia superior"
-              description="Activa Pro o Premium para desbloquear análisis más profundos, historial ampliado y recomendaciones más inteligentes."
+              description="Activa Pro o Premium para desbloquear análisis más ricos, más historial y recomendaciones más inteligentes."
             />
           </div>
         </div>
@@ -399,11 +421,7 @@ export default function HomePage() {
             price="$0"
             subtitle="La mejor forma de empezar"
             features={[
-              `Hasta ${
-                Number.isFinite(freeLimits.historyLimit)
-                  ? freeLimits.historyLimit
-                  : "∞"
-              } análisis guardados`,
+              `Hasta ${getHistoryLimitLabel("free")} análisis guardados`,
               "Health Score",
               "Análisis base",
               "Marketplace general",
@@ -411,7 +429,7 @@ export default function HomePage() {
             ]}
             ctaHref="/quiz"
             ctaLabel="Empezar gratis"
-            current={false}
+            current={currentPlan === "free"}
             highlighted={false}
           />
 
@@ -422,11 +440,7 @@ export default function HomePage() {
             period="/mes"
             subtitle="Donde la plataforma realmente cobra vida"
             features={[
-              `Hasta ${
-                Number.isFinite(proLimits.historyLimit)
-                  ? proLimits.historyLimit
-                  : "∞"
-              } análisis guardados`,
+              `Hasta ${getHistoryLimitLabel("pro")} análisis guardados`,
               "IA avanzada",
               "Recomendaciones priorizadas",
               "Marketplace inteligente",
@@ -445,11 +459,7 @@ export default function HomePage() {
             period="/mes"
             subtitle="La experiencia más completa de VitaSmart AI"
             features={[
-              `Hasta ${
-                Number.isFinite(premiumLimits.historyLimit)
-                  ? premiumLimits.historyLimit
-                  : "∞"
-              } análisis guardados`,
+              `Hasta ${getHistoryLimitLabel("premium")} análisis guardados`,
               "Todo lo de Pro",
               "Marketplace premium",
               "Mayor personalización",
@@ -512,9 +522,9 @@ export default function HomePage() {
                 />
                 <HomeComparisonRow
                   label="Historial guardado"
-                  free="3"
-                  pro="50"
-                  premium="Ilimitado"
+                  free={getHistoryLimitLabel("free")}
+                  pro={getHistoryLimitLabel("pro")}
+                  premium={getHistoryLimitLabel("premium")}
                 />
                 <HomeComparisonRow
                   label="Marketplace inteligente"
@@ -559,8 +569,8 @@ export default function HomePage() {
               </h2>
               <p className="mt-4 leading-7 text-slate-600">
                 Pro está diseñado para usuarios que ya entendieron el valor del
-                análisis inicial y quieren una experiencia de salud preventiva
-                más útil, accionable y continua.
+                análisis inicial y quieren una experiencia más útil, más clara y
+                más continua.
               </p>
 
               <div className="mt-6 grid gap-3">
@@ -573,11 +583,11 @@ export default function HomePage() {
 
             <div className="rounded-3xl bg-slate-900 p-8 text-white shadow-sm">
               <h2 className="text-2xl font-bold">
-                Lo que hace irresistible a Premium
+                Lo que hace deseable a Premium
               </h2>
               <p className="mt-4 leading-7 text-slate-300">
-                Premium no es solo “más”. Es la versión más completa, refinada y
-                personalizada del sistema VitaSmart AI.
+                Premium no es solo “más”. Es la versión más completa, más
+                continua y más refinada del sistema VitaSmart AI.
               </p>
 
               <div className="mt-6 grid gap-3">
@@ -604,7 +614,7 @@ export default function HomePage() {
 
             <p className="mt-4 text-slate-300">
               Entra gratis, descubre tu perfil actual y decide si quieres
-              quedarte en lo básico o pasar a una experiencia mucho más poderosa.
+              quedarte en lo básico o pasar a una experiencia mucho más valiosa.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
