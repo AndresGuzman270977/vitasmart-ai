@@ -50,7 +50,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // ✅ Obtener usuario
     const {
       data: { user },
       error: userError,
@@ -63,7 +62,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Leer body
     const body = (await req.json()) as CheckoutBody;
     const requestedPlan = normalizePlan(body.plan);
 
@@ -74,16 +72,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Obtener perfil
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("stripe_customer_id, stripe_subscription_id, subscription_status")
+      .select(
+        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
+      )
       .eq("id", user.id)
       .maybeSingle();
 
+    if (profileError) {
+      return NextResponse.json(
+        { error: profileError.message || "No se pudo cargar el perfil." },
+        { status: 500 }
+      );
+    }
+
     let customerId = profile?.stripe_customer_id || null;
 
-    // ✅ Crear customer si no existe
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email ?? undefined,
@@ -94,24 +99,38 @@ export async function POST(req: Request) {
 
       customerId = customer.id;
 
-      // guardar en Supabase
-      await supabase
+      const { error: updateCustomerError } = await supabase
         .from("user_profiles")
         .update({
           stripe_customer_id: customerId,
+          email: user.email ?? profile?.email ?? null,
         })
         .eq("id", user.id);
+
+      if (updateCustomerError) {
+        return NextResponse.json(
+          {
+            error:
+              updateCustomerError.message ||
+              "No se pudo guardar el cliente de Stripe.",
+          },
+          { status: 500 }
+        );
+      }
     }
 
-    // ⚠️ Opcional: evitar doble suscripción activa
+    const currentStatus = String(profile?.subscription_status || "").trim();
+
     if (
-      profile?.subscription_status === "active" ||
-      profile?.subscription_status === "trialing"
+      profile?.stripe_subscription_id &&
+      (currentStatus === "active" ||
+        currentStatus === "trialing" ||
+        currentStatus === "past_due")
     ) {
       return NextResponse.json(
         {
           error:
-            "Ya tienes una suscripción activa. Usa el portal para gestionarla.",
+            "Ya tienes una suscripción activa o gestionable. Usa el portal para administrarla.",
         },
         { status: 400 }
       );
@@ -120,10 +139,9 @@ export async function POST(req: Request) {
     const priceId = getStripePriceId(requestedPlan);
     const baseUrl = getBaseUrl();
 
-    // ✅ Crear checkout session
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer: customerId, // 🔥 clave
+      customer: customerId,
       line_items: [
         {
           price: priceId,
@@ -132,21 +150,17 @@ export async function POST(req: Request) {
       ],
       success_url: `${baseUrl}/pricing?checkout=success&plan=${requestedPlan}`,
       cancel_url: `${baseUrl}/pricing?checkout=cancelled`,
-
       client_reference_id: user.id,
-
       metadata: {
         supabase_user_id: user.id,
         plan: requestedPlan,
       },
-
       subscription_data: {
         metadata: {
           supabase_user_id: user.id,
           plan: requestedPlan,
         },
       },
-
       allow_promotion_codes: true,
     });
 

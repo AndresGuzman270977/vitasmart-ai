@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
 import { stripe } from "../../../lib/stripe";
 import { supabaseAdmin } from "../../../lib/supabaseAdmin";
 import { normalizePlan, type PlanType } from "../../../lib/planLimits";
@@ -17,6 +18,50 @@ type UpsertUserProfileInput = {
   cancelAtPeriodEnd?: boolean | null;
 };
 
+function getSubscriptionPlanFromPriceId(priceId?: string | null): PlanType {
+  if (!priceId) return "free";
+
+  if (priceId === process.env.STRIPE_PRICE_ID_PREMIUM) {
+    return "premium";
+  }
+
+  if (priceId === process.env.STRIPE_PRICE_ID_PRO) {
+    return "pro";
+  }
+
+  return "free";
+}
+
+function getMetadataPlan(metadata?: StripeMetadata): PlanType {
+  return normalizePlan(metadata?.plan);
+}
+
+function getMetadataUserId(metadata?: StripeMetadata): string {
+  return metadata?.supabase_user_id || "";
+}
+
+function isPaidLikeStatus(status?: string | null) {
+  return status === "active" || status === "trialing" || status === "past_due";
+}
+
+function shouldDowngradeToFree(status?: string | null) {
+  return (
+    status === "canceled" ||
+    status === "unpaid" ||
+    status === "incomplete_expired"
+  );
+}
+
+async function getCurrentProfilePlan(userId: string): Promise<PlanType> {
+  const { data } = await supabaseAdmin
+    .from("user_profiles")
+    .select("plan")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return normalizePlan((data as { plan?: string | null } | null)?.plan);
+}
+
 async function upsertUserProfile({
   userId,
   plan,
@@ -32,15 +77,15 @@ async function upsertUserProfile({
     plan,
   };
 
-  if (stripeCustomerId) {
+  if (typeof stripeCustomerId !== "undefined") {
     payload.stripe_customer_id = stripeCustomerId;
   }
 
-  if (stripeSubscriptionId) {
+  if (typeof stripeSubscriptionId !== "undefined") {
     payload.stripe_subscription_id = stripeSubscriptionId;
   }
 
-  if (subscriptionStatus) {
+  if (typeof subscriptionStatus !== "undefined") {
     payload.subscription_status = subscriptionStatus;
   }
 
@@ -84,28 +129,6 @@ async function upsertUserProfile({
   }
 }
 
-function getSubscriptionPlanFromPriceId(priceId?: string | null): PlanType {
-  if (!priceId) return "free";
-
-  if (priceId === process.env.STRIPE_PRICE_ID_PREMIUM) {
-    return "premium";
-  }
-
-  if (priceId === process.env.STRIPE_PRICE_ID_PRO) {
-    return "pro";
-  }
-
-  return "free";
-}
-
-function getMetadataPlan(metadata?: StripeMetadata): PlanType {
-  return normalizePlan(metadata?.plan);
-}
-
-function getMetadataUserId(metadata?: StripeMetadata): string {
-  return metadata?.supabase_user_id || "";
-}
-
 async function findUserIdByStripeRefs(params: {
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
@@ -119,7 +142,9 @@ async function findUserIdByStripeRefs(params: {
       .eq("stripe_subscription_id", stripeSubscriptionId)
       .maybeSingle();
 
-    if (data?.id) return data.id;
+    if ((data as { id?: string } | null)?.id) {
+      return (data as { id: string }).id;
+    }
   }
 
   if (stripeCustomerId) {
@@ -129,7 +154,9 @@ async function findUserIdByStripeRefs(params: {
       .eq("stripe_customer_id", stripeCustomerId)
       .maybeSingle();
 
-    if (data?.id) return data.id;
+    if ((data as { id?: string } | null)?.id) {
+      return (data as { id: string }).id;
+    }
   }
 
   return "";
@@ -150,8 +177,11 @@ async function resolveUserIdFromSubscription(params: {
   const directPlan = getMetadataPlan(params.metadata);
 
   if (directUserId && params.subscriptionId) {
-    const subscription = await stripe.subscriptions.retrieve(params.subscriptionId);
+    const subscription = await stripe.subscriptions.retrieve(
+      params.subscriptionId
+    );
     const priceId = subscription.items.data?.[0]?.price?.id || null;
+
     return {
       userId: directUserId,
       metadataPlan: directPlan,
@@ -163,13 +193,12 @@ async function resolveUserIdFromSubscription(params: {
 
   if (params.subscriptionId) {
     try {
-      const subscription = await stripe.subscriptions.retrieve(params.subscriptionId);
-      const retrievedUserId = getMetadataUserId(
-        subscription.metadata as StripeMetadata | undefined
+      const subscription = await stripe.subscriptions.retrieve(
+        params.subscriptionId
       );
-      const retrievedPlan = getMetadataPlan(
-        subscription.metadata as StripeMetadata | undefined
-      );
+      const metadata = subscription.metadata as StripeMetadata | undefined;
+      const retrievedUserId = getMetadataUserId(metadata);
+      const retrievedPlan = getMetadataPlan(metadata);
       const priceId = subscription.items.data?.[0]?.price?.id || null;
 
       if (retrievedUserId) {
@@ -230,28 +259,20 @@ export async function POST(req: Request) {
 
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as {
-          metadata?: StripeMetadata;
-          client_reference_id?: string | null;
-          customer?: string | null;
-          subscription?: string | null;
-          customer_details?: {
-            email?: string | null;
-          } | null;
-          customer_email?: string | null;
-        };
+        const session = event.data.object as Stripe.Checkout.Session;
 
-        const stripeCustomerId = session.customer || null;
-        const stripeSubscriptionId = session.subscription || null;
+        const metadata = session.metadata as StripeMetadata | undefined;
+        const stripeCustomerId =
+          typeof session.customer === "string" ? session.customer : null;
+        const stripeSubscriptionId =
+          typeof session.subscription === "string" ? session.subscription : null;
         const email =
           session.customer_details?.email || session.customer_email || null;
 
         let userId =
-          getMetadataUserId(session.metadata) ||
-          session.client_reference_id ||
-          "";
+          getMetadataUserId(metadata) || session.client_reference_id || "";
 
-        let plan = getMetadataPlan(session.metadata);
+        let plan = getMetadataPlan(metadata);
         let cancelAtPeriodEnd = false;
 
         if ((!userId || plan === "free") && stripeSubscriptionId) {
@@ -260,9 +281,11 @@ export async function POST(req: Request) {
               stripeSubscriptionId
             );
 
-            const metadata = subscription.metadata as StripeMetadata | undefined;
-            const retrievedUserId = getMetadataUserId(metadata);
-            const retrievedPlan = getMetadataPlan(metadata);
+            const subscriptionMetadata =
+              subscription.metadata as StripeMetadata | undefined;
+
+            const retrievedUserId = getMetadataUserId(subscriptionMetadata);
+            const retrievedPlan = getMetadataPlan(subscriptionMetadata);
             const priceId = subscription.items.data?.[0]?.price?.id || null;
 
             cancelAtPeriodEnd = subscription.cancel_at_period_end ?? false;
@@ -322,33 +345,21 @@ export async function POST(req: Request) {
 
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        const subscription = event.data.object as {
-          id?: string | null;
-          customer?: string | null;
-          metadata?: StripeMetadata;
-          status?: string;
-          cancel_at_period_end?: boolean;
-          items?: {
-            data?: Array<{
-              price?: {
-                id?: string | null;
-              } | null;
-            }>;
-          };
-        };
+        const subscription = event.data.object as Stripe.Subscription;
 
-        const stripeCustomerId = subscription.customer || null;
+        const stripeCustomerId =
+          typeof subscription.customer === "string"
+            ? subscription.customer
+            : null;
         const stripeSubscriptionId = subscription.id || null;
 
         const resolved = await resolveUserIdFromSubscription({
           subscriptionId: stripeSubscriptionId,
           stripeCustomerId,
-          metadata: subscription.metadata,
+          metadata: subscription.metadata as StripeMetadata | undefined,
         });
 
-        const fallbackPriceId =
-          subscription.items?.data?.[0]?.price?.id || null;
-
+        const fallbackPriceId = subscription.items.data?.[0]?.price?.id || null;
         const metadataPlan = resolved.metadataPlan;
         const priceId = resolved.priceId || fallbackPriceId;
         const status = resolved.status || subscription.status || "";
@@ -381,11 +392,7 @@ export async function POST(req: Request) {
           break;
         }
 
-        if (
-          status === "active" ||
-          status === "trialing" ||
-          status === "past_due"
-        ) {
+        if (isPaidLikeStatus(status)) {
           await upsertUserProfile({
             userId: resolved.userId,
             plan: resolvedPlan,
@@ -394,10 +401,21 @@ export async function POST(req: Request) {
             subscriptionStatus: status,
             cancelAtPeriodEnd,
           });
-        } else {
+        } else if (shouldDowngradeToFree(status)) {
           await upsertUserProfile({
             userId: resolved.userId,
             plan: "free",
+            stripeCustomerId,
+            stripeSubscriptionId,
+            subscriptionStatus: status,
+            cancelAtPeriodEnd,
+          });
+        } else {
+          const currentPlan = await getCurrentProfilePlan(resolved.userId);
+
+          await upsertUserProfile({
+            userId: resolved.userId,
+            plan: currentPlan,
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: status,
@@ -409,21 +427,18 @@ export async function POST(req: Request) {
       }
 
       case "customer.subscription.deleted": {
-        const subscription = event.data.object as {
-          id?: string | null;
-          customer?: string | null;
-          metadata?: StripeMetadata;
-          status?: string;
-          cancel_at_period_end?: boolean;
-        };
+        const subscription = event.data.object as Stripe.Subscription;
 
-        const stripeCustomerId = subscription.customer || null;
+        const stripeCustomerId =
+          typeof subscription.customer === "string"
+            ? subscription.customer
+            : null;
         const stripeSubscriptionId = subscription.id || null;
 
         const resolved = await resolveUserIdFromSubscription({
           subscriptionId: stripeSubscriptionId,
           stripeCustomerId,
-          metadata: subscription.metadata,
+          metadata: subscription.metadata as StripeMetadata | undefined,
         });
 
         const status = subscription.status || "canceled";
@@ -450,29 +465,31 @@ export async function POST(req: Request) {
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object as {
-          customer?: string | null;
-          subscription?: string | null;
-          lines?: {
-            data?: Array<{
-              price?: {
-                id?: string | null;
-              } | null;
-              metadata?: StripeMetadata;
-            }>;
-          };
-          parent?: {
-            subscription_details?: {
-              metadata?: StripeMetadata;
-            };
-          };
-        };
+        const invoice = event.data.object as Stripe.Invoice;
 
         const metadataFromParent =
-          invoice.parent?.subscription_details?.metadata;
-        const metadataFromLine = invoice.lines?.data?.[0]?.metadata;
-        const stripeCustomerId = invoice.customer || null;
-        const stripeSubscriptionId = invoice.subscription || null;
+          invoice.parent &&
+          typeof invoice.parent !== "string" &&
+          "subscription_details" in invoice.parent
+            ? (invoice.parent.subscription_details?.metadata as
+                | StripeMetadata
+                | undefined)
+            : undefined;
+
+        const metadataFromLine = invoice.lines?.data?.[0]?.metadata as
+          | StripeMetadata
+          | undefined;
+
+        const stripeCustomerId =
+          typeof invoice.customer === "string" ? invoice.customer : null;
+
+        const stripeSubscriptionId =
+          invoice.parent &&
+          typeof invoice.parent !== "string" &&
+          "subscription_details" in invoice.parent &&
+          typeof invoice.parent.subscription_details?.subscription === "string"
+            ? invoice.parent.subscription_details.subscription
+            : null;
 
         let userId =
           getMetadataUserId(metadataFromParent) ||
@@ -492,9 +509,11 @@ export async function POST(req: Request) {
         });
 
         if (userId) {
+          const currentPlan = await getCurrentProfilePlan(userId);
+
           await upsertUserProfile({
             userId,
-            plan: "free",
+            plan: currentPlan,
             stripeCustomerId,
             stripeSubscriptionId,
             subscriptionStatus: "payment_failed",

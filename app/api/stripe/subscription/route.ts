@@ -23,6 +23,10 @@ function getBearerToken(req: Request) {
   return authHeader.replace("Bearer ", "").trim();
 }
 
+function isManagedPaidStatus(status?: string | null) {
+  return status === "active" || status === "trialing" || status === "past_due";
+}
+
 export async function POST(req: Request) {
   try {
     const token = getBearerToken(req);
@@ -81,7 +85,7 @@ export async function POST(req: Request) {
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
       .select(
-        "plan, stripe_customer_id, stripe_subscription_id, subscription_status"
+        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
       )
       .eq("id", user.id)
       .single();
@@ -129,6 +133,20 @@ export async function POST(req: Request) {
         );
       }
 
+      if (normalizePlan(profile.plan) === targetPlan) {
+        return NextResponse.json(
+          {
+            ok: true,
+            action,
+            subscriptionId: subscription.id,
+            status: subscription.status,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+            message: `Ya estás en el plan ${targetPlan.toUpperCase()}.`,
+          },
+          { status: 200 }
+        );
+      }
+
       const targetPriceId = getStripePriceId(targetPlan);
 
       const updatedSubscription = await stripe.subscriptions.update(
@@ -154,7 +172,8 @@ export async function POST(req: Request) {
         .update({
           plan: targetPlan,
           subscription_status: updatedSubscription.status,
-          cancel_at_period_end: updatedSubscription.cancel_at_period_end ?? false,
+          cancel_at_period_end:
+            updatedSubscription.cancel_at_period_end ?? false,
         })
         .eq("id", user.id);
 
@@ -169,6 +188,16 @@ export async function POST(req: Request) {
     }
 
     if (action === "cancel_at_period_end") {
+      if (!isManagedPaidStatus(subscription.status)) {
+        return NextResponse.json(
+          {
+            error:
+              "La suscripción no está en un estado gestionable para programar cancelación.",
+          },
+          { status: 400 }
+        );
+      }
+
       const updatedSubscription = await stripe.subscriptions.update(
         profile.stripe_subscription_id,
         {
