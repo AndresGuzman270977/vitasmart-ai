@@ -32,6 +32,9 @@ type UserProfileRow = {
 
 const DEFAULT_PLAN: PlanType = "free";
 
+const USER_PROFILE_SELECT =
+  "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at, updated_at";
+
 function makeFallbackProfile(user: BasicUser): UserProfile {
   return {
     id: user.id,
@@ -89,12 +92,12 @@ function normalizeProfile(data: UserProfileRow): UserProfile {
   };
 }
 
-async function selectProfileByUserId(userId: string): Promise<UserProfileRow | null> {
+async function selectProfileByUserId(
+  userId: string
+): Promise<UserProfileRow | null> {
   const { data, error } = await supabase
     .from("user_profiles")
-    .select(
-      "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at, updated_at"
-    )
+    .select(USER_PROFILE_SELECT)
     .eq("id", userId)
     .maybeSingle();
 
@@ -154,14 +157,14 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
   };
 
   try {
-    const { data, error } = await supabase
-      .from("user_profiles")
+    // Fix de tipado para builds de Vercel / Supabase types incompletos
+    const userProfilesTable = supabase.from("user_profiles") as any;
+
+    const { data, error } = await userProfilesTable
       .upsert([payload], {
         onConflict: "id",
       })
-      .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at, updated_at"
-      )
+      .select(USER_PROFILE_SELECT)
       .maybeSingle();
 
     if (error) {
@@ -187,22 +190,26 @@ export async function updateUserPlan(
   userId: string,
   plan: PlanType
 ): Promise<UserProfile> {
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .update({
-      plan: normalizePlan(plan),
-    })
-    .eq("id", userId)
-    .select(
-      "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at, updated_at"
-    )
-    .single();
+  try {
+    // Fix de tipado para builds de Vercel / Supabase types incompletos
+    const userProfilesTable = supabase.from("user_profiles") as any;
 
-  if (error) {
+    const { data, error } = await userProfilesTable
+      .update({
+        plan: normalizePlan(plan),
+      })
+      .eq("id", userId)
+      .select(USER_PROFILE_SELECT)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return normalizeProfile(data as UserProfileRow);
+  } catch (error) {
     throw error;
   }
-
-  return normalizeProfile(data as UserProfileRow);
 }
 
 export async function getCurrentStripeCustomerId(): Promise<string | null> {
