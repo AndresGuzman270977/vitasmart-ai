@@ -35,6 +35,9 @@ type SubscriptionAction =
   | "cancel_at_period_end"
   | "resume";
 
+const USER_PROFILE_SELECT =
+  "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end";
+
 export default function PricingPage() {
   return (
     <Suspense
@@ -108,11 +111,10 @@ function PricingPageContent() {
     userId: string,
     email?: string | null
   ): Promise<UserProfileRow> {
-    const { data: existingProfile, error: existingError } = await supabase
-      .from("user_profiles")
-      .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
-      )
+    const userProfilesTable = supabase.from("user_profiles") as any;
+
+    const { data: existingProfile, error: existingError } = await userProfilesTable
+      .select(USER_PROFILE_SELECT)
       .eq("id", userId)
       .maybeSingle();
 
@@ -131,12 +133,9 @@ function PricingPageContent() {
       cancel_at_period_end: false,
     };
 
-    const { data: createdProfile, error: createError } = await supabase
-      .from("user_profiles")
+    const { data: createdProfile, error: createError } = await userProfilesTable
       .upsert([payload], { onConflict: "id" })
-      .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
-      )
+      .select(USER_PROFILE_SELECT)
       .single();
 
     if (createError) {
