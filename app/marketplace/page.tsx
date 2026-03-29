@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { PRODUCTS, type Product } from "../lib/products";
-import {
-  rankProductsForAssessment,
-  type AssessmentProfile,
-  type RankedProduct,
-} from "../lib/productRanking";
-import { supabase } from "../lib/supabase";
+import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import {
   getPlanLabel,
   getPlanLimits,
@@ -16,8 +10,121 @@ import {
   normalizePlan,
   type PlanType,
 } from "../lib/planLimits";
-import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import UpgradePrompt from "../../components/UpgradePrompt";
+import MarketplaceHero from "../../components/marketplace/MarketplaceHero";
+import IngredientHighlightCard from "../../components/marketplace/IngredientHighlightCard";
+import BudgetComparisonGrid from "../../components/marketplace/BudgetComparisonGrid";
+import RelatedRecommendationsSection from "../../components/marketplace/RelatedRecommendationsSection";
+
+type ProductRecommendationView = {
+  product: {
+    slug: string;
+    ingredientSlug: string;
+    productName: string;
+    brand: string;
+    manufacturer: string;
+    form: "capsule" | "tablet" | "softgel" | "powder" | "liquid" | "gummy";
+    presentation: string;
+    servings: number | null;
+    priceUsd: number | null;
+    priceLabel: string;
+    estimatedCostPerDayUsd: number | null;
+    budgetTier: "excellent" | "very_good" | "good";
+    qualityScore: number;
+    valueScore: number;
+    qualitySeals: string[];
+    qualityNotes: string[];
+    imageUrl: string;
+    buyUrl: string;
+    availableMarkets: ("amazon" | "iherb" | "direct")[];
+  };
+  narratives: {
+    whyForUser: string;
+    scienceSummary: string;
+    labQualitySummary: string;
+    howToTake: string;
+    restrictionsSummary: string;
+    sideEffectsSummary: string;
+    budgetReason: string;
+  };
+  fitScore: number;
+  qualityScore: number;
+  valueScore: number;
+};
+
+type TopIngredientRecommendationView = {
+  ingredientSlug: string;
+  ingredientName: string;
+  matchScore: number;
+  safetyDecision: "allow" | "allow_with_caution" | "high_caution" | "avoid";
+  whyMatched: string[];
+  cautions: string[];
+  evidenceLevel?: "high" | "moderate" | "limited";
+  evidenceSummary?: string;
+  scientificContext?: string;
+  options: {
+    excellent?: ProductRecommendationView;
+    veryGood?: ProductRecommendationView;
+    good?: ProductRecommendationView;
+  };
+};
+
+type HealthAnalysisResponse = {
+  plan: PlanType;
+  requestedAiMode: "basic" | "advanced";
+  appliedAiMode: "basic" | "advanced";
+  advancedAI: boolean;
+  wasDowngraded: boolean;
+  upgradeRequired: boolean;
+  upgradeMessage: string | null;
+  assessmentVersion: string;
+  scores: {
+    healthScore: number;
+    sleepScore: number | null;
+    stressScore: number | null;
+    energyScore: number | null;
+    focusScore: number | null;
+    metabolicScore: number | null;
+  };
+  confidence: {
+    confidenceLevel: "high" | "moderate" | "limited";
+    confidenceExplanation: string;
+    completenessScore: number;
+  };
+  summaries: {
+    executiveSummary: string;
+    clinicalStyleSummary: string;
+    scoreNarrative: string;
+    professionalFollowUpAdvice: string;
+  };
+  insights: {
+    strengths: string[];
+    mainDrivers: string[];
+    priorityActions: string[];
+    riskSignals: string[];
+  };
+  userNeeds: {
+    dominantNeeds: string[];
+    secondaryNeeds: string[];
+  };
+  advancedRecommendations: string[];
+  productRecommendations: TopIngredientRecommendationView[];
+};
+
+type AssessmentInput = {
+  age?: number;
+  sex?: "male" | "female";
+  stressLevel?: number;
+  sleepHours?: number;
+  mainGoal?: string;
+};
+
+type QuizDraft = {
+  plan?: PlanType;
+  requestedAiMode?: "basic" | "advanced";
+  assessment: AssessmentInput;
+  biomarkers?: Record<string, unknown>;
+};
 
 type CategoryFilter =
   | "all"
@@ -25,44 +132,31 @@ type CategoryFilter =
   | "stress"
   | "sleep"
   | "focus"
-  | "general";
+  | "general"
+  | "metabolic"
+  | "recovery";
 
-type PriorityFilter = "all" | "high" | "medium" | "low";
+type EvidenceFilter = "all" | "high" | "moderate" | "limited";
+type TierFilter = "all" | "excellent" | "very_good" | "good";
 
-type HealthAssessment = {
-  id: number;
-  age: string;
-  sex: string;
-  stress: string;
-  sleep: string;
-  goal: string;
-};
-
-type UserProfileRow = {
-  id: string;
-  email?: string | null;
-  plan?: PlanType | string | null;
-  stripe_customer_id?: string | null;
-  stripe_subscription_id?: string | null;
-  subscription_status?: string | null;
-  created_at?: string;
-  updated_at?: string;
-};
+const QUIZ_STORAGE_KEY = "vitaSmartQuizDraft";
+const LAST_ANALYSIS_CACHE_KEY = "vitaSmartLastHealthAnalysis";
 
 export default function MarketplacePage() {
-  const [category, setCategory] = useState<CategoryFilter>("all");
-  const [priority, setPriority] = useState<PriorityFilter>("all");
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [latestAssessment, setLatestAssessment] =
-    useState<HealthAssessment | null>(null);
-  const [rankedProducts, setRankedProducts] = useState<RankedProduct[]>([]);
-  const [plan, setPlan] = useState<PlanType>("free");
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
-    null
-  );
-  const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
   const [error, setError] = useState("");
+
+  const [plan, setPlan] = useState<PlanType>("free");
+  const [analysis, setAnalysis] = useState<HealthAnalysisResponse | null>(null);
+  const [draft, setDraft] = useState<QuizDraft | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<CategoryFilter>("all");
+  const [evidence, setEvidence] = useState<EvidenceFilter>("all");
+  const [tier, setTier] = useState<TierFilter>("all");
+  const [selectedIngredientSlug, setSelectedIngredientSlug] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     let ignore = false;
@@ -74,69 +168,89 @@ export default function MarketplacePage() {
           setError("");
         }
 
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+        let resolvedPlan: PlanType = "free";
 
-        if (userError) {
-          throw userError;
+        try {
+          await ensureUserProfile();
+          const profile = await getCurrentUserProfile();
+          resolvedPlan = normalizePlan(profile?.plan);
+        } catch (err) {
+          console.error("Error resolving marketplace plan:", err);
         }
-
-        if (!user) {
-          if (!ignore) {
-            setPlan("free");
-            setSubscriptionStatus(null);
-            setHasStripeCustomer(false);
-            setLatestAssessment(null);
-            setRankedProducts([]);
-          }
-          return;
-        }
-
-        await ensureUserProfile();
-        const profile = (await getCurrentUserProfile()) as UserProfileRow | null;
-        const currentPlan: PlanType = normalizePlan(profile?.plan);
-
-        const { data, error: assessmentError } = await supabase
-          .from("health_assessments")
-          .select("id, age, sex, stress, sleep, goal")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (assessmentError) {
-          throw assessmentError;
-        }
-
-        const latest = data?.[0] ?? null;
-        const limits = getPlanLimits(currentPlan);
 
         if (!ignore) {
-          setPlan(currentPlan);
-          setSubscriptionStatus(profile?.subscription_status ?? null);
-          setHasStripeCustomer(Boolean(profile?.stripe_customer_id));
-          setLatestAssessment(latest);
+          setPlan(resolvedPlan);
+        }
 
-          if (latest && limits.marketplaceMode !== "basic") {
-            const ranked = rankProductsForAssessment(
-              latest as AssessmentProfile
-            );
-            setRankedProducts(ranked);
-          } else {
-            setRankedProducts([]);
+        let parsedDraft: QuizDraft | null = null;
+
+        if (typeof window !== "undefined") {
+          const rawDraft = sessionStorage.getItem(QUIZ_STORAGE_KEY);
+          if (rawDraft) {
+            try {
+              parsedDraft = JSON.parse(rawDraft) as QuizDraft;
+            } catch {
+              parsedDraft = null;
+            }
           }
         }
+
+        if (!ignore) {
+          setDraft(parsedDraft);
+        }
+
+        let cachedAnalysis: HealthAnalysisResponse | null = null;
+
+        if (typeof window !== "undefined") {
+          const rawAnalysis = sessionStorage.getItem(LAST_ANALYSIS_CACHE_KEY);
+          if (rawAnalysis) {
+            try {
+              cachedAnalysis = JSON.parse(rawAnalysis) as HealthAnalysisResponse;
+            } catch {
+              cachedAnalysis = null;
+            }
+          }
+        }
+
+        if (!cachedAnalysis && parsedDraft?.assessment) {
+          const response = await fetch("/api/health-analysis", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              plan: parsedDraft.plan ?? resolvedPlan,
+              requestedAiMode: parsedDraft.requestedAiMode ?? "advanced",
+              assessment: parsedDraft.assessment,
+              biomarkers: parsedDraft.biomarkers,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data?.error || "No se pudo generar el marketplace.");
+          }
+
+          cachedAnalysis = data as HealthAnalysisResponse;
+
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(
+              LAST_ANALYSIS_CACHE_KEY,
+              JSON.stringify(cachedAnalysis)
+            );
+          }
+        }
+
+        if (!ignore) {
+          setAnalysis(cachedAnalysis);
+        }
       } catch (err: any) {
-        console.error("Error loading marketplace:", err);
+        console.error("Marketplace error:", err);
 
         if (!ignore) {
           setError(err?.message || "No se pudo cargar el marketplace.");
-          setPlan("free");
-          setSubscriptionStatus(null);
-          setHasStripeCustomer(false);
-          setLatestAssessment(null);
-          setRankedProducts([]);
+          setAnalysis(null);
         }
       } finally {
         if (!ignore) {
@@ -153,6 +267,7 @@ export default function MarketplacePage() {
   }, []);
 
   const planLimits = useMemo(() => getPlanLimits(plan), [plan]);
+
   const smartMarketplaceEnabled = planLimits.marketplaceMode !== "basic";
   const premiumMarketplaceEnabled = planLimits.marketplaceMode === "premium";
   const nextRecommendedPlan =
@@ -164,92 +279,33 @@ export default function MarketplacePage() {
     return "General";
   }, [premiumMarketplaceEnabled, smartMarketplaceEnabled]);
 
-  const subscriptionStatusLabel = useMemo(() => {
-    if (!subscriptionStatus) return "Sin suscripción activa";
-    if (subscriptionStatus === "active") return "Activa";
-    if (subscriptionStatus === "trialing") return "En prueba";
-    if (subscriptionStatus === "past_due") return "Pago pendiente";
-    if (subscriptionStatus === "payment_failed") return "Pago fallido";
-    if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed") {
-      return "Procesando activación";
-    }
-    return subscriptionStatus;
-  }, [subscriptionStatus]);
-
-  const filteredProducts = useMemo(() => {
-    const baseProducts =
-      smartMarketplaceEnabled && rankedProducts.length > 0
-        ? rankedProducts
-        : PRODUCTS.map((product) => ({
-            ...product,
-            rankScore: 0,
-            reasons: [],
-          }));
-
-    return baseProducts.filter((product) => {
-      const matchCategory =
-        category === "all" ? true : product.category === category;
-
-      const matchPriority =
-        priority === "all" ? true : product.priority === priority;
-
-      const term = search.trim().toLowerCase();
-
-      const matchSearch =
-        term.length === 0
-          ? true
-          : [
-              product.productName,
-              product.brand,
-              product.supplementName,
-              translateCategory(product.category),
-            ]
-              .join(" ")
-              .toLowerCase()
-              .includes(term);
-
-      return matchCategory && matchPriority && matchSearch;
-    });
-  }, [category, priority, search, rankedProducts, smartMarketplaceEnabled]);
-
-  const topRecommended = smartMarketplaceEnabled
-    ? filteredProducts.slice(0, 3)
-    : [];
-  const remainingProducts = smartMarketplaceEnabled
-    ? filteredProducts.slice(3)
-    : filteredProducts;
-
   const marketplaceNarrative = useMemo(() => {
     if (premiumMarketplaceEnabled) {
-      return "Tu experiencia actual te permite explorar recomendaciones mejor priorizadas, con una sensación más premium y más alineada con tu perfil.";
+      return "Tu experiencia actual te permite explorar recomendaciones mejor priorizadas, comparadas por presupuesto y presentadas con una narrativa mucho más útil, convincente y premium.";
     }
 
     if (smartMarketplaceEnabled) {
-      return "Tu marketplace ya usa señales de tu perfil para ayudarte a descubrir opciones con más intención y más contexto.";
+      return "Tu marketplace ya usa señales de tu perfil para ayudarte a descubrir opciones con más intención y más contexto, aunque todavía no en el nivel más premium.";
     }
 
-    return "Ahora mismo estás viendo el catálogo general. El verdadero salto aparece cuando el marketplace deja de ser genérico y empieza a responder a tu perfil.";
+    return "Ahora mismo estás viendo la puerta de entrada. El verdadero salto ocurre cuando el marketplace deja de ser genérico y comienza a responder a tu perfil, a tus prioridades y a tu objetivo principal.";
   }, [premiumMarketplaceEnabled, smartMarketplaceEnabled]);
 
   const personalizationNarrative = useMemo(() => {
-    if (premiumMarketplaceEnabled && latestAssessment) {
-      return "Tu catálogo no solo muestra productos: intenta priorizar mejor lo que podría tener más afinidad con tu momento actual.";
+    if (premiumMarketplaceEnabled && analysis?.productRecommendations?.length) {
+      return "Tu catálogo no solo muestra productos: intenta ordenar mejor qué ingrediente y qué nivel de producto podría tener más sentido para tu momento actual.";
     }
 
-    if (smartMarketplaceEnabled && latestAssessment) {
+    if (smartMarketplaceEnabled && analysis?.productRecommendations?.length) {
       return "Ya estás viendo una versión más inteligente del catálogo, usando señales de tu último análisis para ordenar mejor las recomendaciones.";
     }
 
     if (smartMarketplaceEnabled) {
-      return "Tu plan ya permite una experiencia más inteligente, pero hará más sentido cuando la plataforma tenga un análisis reciente para trabajar.";
+      return "Tu plan ya permite una experiencia más inteligente, pero hará mucho más sentido cuando exista un análisis reciente y una selección más profunda de recomendaciones.";
     }
 
-    return "El catálogo base te permite explorar, pero todavía no se adapta a lo que más te conviene según tu objetivo y tus señales actuales.";
-  }, [premiumMarketplaceEnabled, smartMarketplaceEnabled, latestAssessment]);
-
-  const canShowUpgradePrompt = plan !== "premium";
-  const hasAssessmentForRanking = Boolean(latestAssessment);
+    return "El catálogo base te permite explorar, pero todavía no se adapta a lo que más te conviene según tu objetivo, tu descanso, tu energía o tu perfil actual.";
+  }, [premiumMarketplaceEnabled, smartMarketplaceEnabled, analysis]);
 
   const experienceNarrative = useMemo(() => {
     if (plan === "premium") {
@@ -257,17 +313,125 @@ export default function MarketplacePage() {
     }
 
     if (plan === "pro") {
-      return hasAssessmentForRanking
-        ? "Tu marketplace ya se siente mucho más útil porque el orden empieza a responder a tu perfil."
-        : "Tu plan ya permite una experiencia más inteligente. En cuanto tengas un análisis reciente, el catálogo podrá ordenarse con más intención.";
+      return analysis?.productRecommendations?.length
+        ? "Tu marketplace ya se siente bastante más útil porque el orden empieza a responder a tu perfil y a una lógica de comparación más seria."
+        : "Tu plan ya permite una experiencia más inteligente. En cuanto tengas un análisis reciente, el catálogo podrá sentirse mucho más personalizado.";
     }
 
     return "Tu experiencia actual te deja explorar el catálogo, pero todavía no convierte la tienda en una herramienta realmente personalizada.";
-  }, [plan, hasAssessmentForRanking]);
+  }, [plan, analysis]);
+
+  const rawRecommendations = analysis?.productRecommendations || [];
+
+  const filteredIngredients = useMemo(() => {
+    return rawRecommendations.filter((item) => {
+      const text = search.trim().toLowerCase();
+
+      const optionList = [
+        item.options.excellent,
+        item.options.veryGood,
+        item.options.good,
+      ].filter(Boolean) as ProductRecommendationView[];
+
+      const matchesSearch =
+        text.length === 0
+          ? true
+          : [
+              item.ingredientName,
+              item.evidenceSummary || "",
+              item.scientificContext || "",
+              ...item.whyMatched,
+              ...optionList.map((opt) => opt.product.productName),
+              ...optionList.map((opt) => opt.product.brand),
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(text);
+
+      const inferredCategory = inferCategoryFromIngredient(item.ingredientName);
+
+      const matchesCategory =
+        category === "all" ? true : inferredCategory === category;
+
+      const matchesEvidence =
+        evidence === "all" ? true : item.evidenceLevel === evidence;
+
+      const optionTiers = optionList.map((opt) => opt.product.budgetTier);
+      const matchesTier =
+        tier === "all" ? true : optionTiers.includes(tier);
+
+      return matchesSearch && matchesCategory && matchesEvidence && matchesTier;
+    });
+  }, [rawRecommendations, search, category, evidence, tier]);
+
+  useEffect(() => {
+    if (!filteredIngredients.length) {
+      setSelectedIngredientSlug(null);
+      return;
+    }
+
+    if (
+      selectedIngredientSlug &&
+      filteredIngredients.some(
+        (item) => item.ingredientSlug === selectedIngredientSlug
+      )
+    ) {
+      return;
+    }
+
+    setSelectedIngredientSlug(filteredIngredients[0].ingredientSlug);
+  }, [filteredIngredients, selectedIngredientSlug]);
+
+  const selectedIngredient = useMemo(() => {
+    if (filteredIngredients.length === 0) return null;
+
+    if (selectedIngredientSlug) {
+      const found = filteredIngredients.find(
+        (item) => item.ingredientSlug === selectedIngredientSlug
+      );
+      if (found) return found;
+    }
+
+    return filteredIngredients[0];
+  }, [filteredIngredients, selectedIngredientSlug]);
+
+  const topRecommended = useMemo(() => {
+    if (!smartMarketplaceEnabled) return [];
+    return filteredIngredients.slice(0, 3);
+  }, [filteredIngredients, smartMarketplaceEnabled]);
+
+  const remainingIngredients = useMemo(() => {
+    if (!smartMarketplaceEnabled) return filteredIngredients;
+    return filteredIngredients.slice(3);
+  }, [filteredIngredients, smartMarketplaceEnabled]);
+
+  const relatedIngredients = useMemo(() => {
+    if (!selectedIngredient) return [];
+    return filteredIngredients.filter(
+      (item) => item.ingredientSlug !== selectedIngredient.ingredientSlug
+    );
+  }, [filteredIngredients, selectedIngredient]);
+
+  const hasAssessmentForRanking = Boolean(draft?.assessment || analysis);
+  const canShowUpgradePrompt = plan !== "premium";
+
+  const latestContextNarrative = useMemo(() => {
+    if (!draft?.assessment) {
+      return "Todavía no hay suficiente contexto del cuestionario para describir mejor el perfil actual.";
+    }
+
+    return `Objetivo ${translateGoal(
+      draft.assessment.mainGoal || ""
+    )}, estrés ${translateStressLevel(
+      draft.assessment.stressLevel
+    )} y sueño ${translateSleepHours(
+      draft.assessment.sleepHours
+    )}.`;
+  }, [draft]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
             VitaSmart AI · Marketplace
@@ -283,7 +447,10 @@ export default function MarketplacePage() {
             </div>
 
             <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
-              Estado: {subscriptionStatusLabel}
+              Personalización:{" "}
+              {analysis?.productRecommendations?.length
+                ? "Activa"
+                : "Sin contexto suficiente"}
             </div>
           </div>
 
@@ -291,10 +458,10 @@ export default function MarketplacePage() {
             Marketplace inteligente de suplementos
           </h1>
 
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-            Descubre suplementos por categoría, prioridad y afinidad con tu
-            perfil actual. Cuanto mejor te conoce la plataforma, más sentido
-            tiene el orden del catálogo.
+          <p className="mt-4 max-w-4xl text-lg leading-8 text-slate-600">
+            Descubre ingredientes y productos organizados por prioridad,
+            presupuesto, contexto de calidad, narrativa científica resumida y
+            afinidad estimada con tu perfil actual.
           </p>
 
           <div className="mt-6 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
@@ -324,17 +491,15 @@ export default function MarketplacePage() {
             </p>
           </div>
 
-          {smartMarketplaceEnabled && latestAssessment ? (
+          {smartMarketplaceEnabled && analysis?.productRecommendations?.length ? (
             <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-              Estás viendo recomendaciones priorizadas según tu último análisis:
-              objetivo <strong>{translateGoal(latestAssessment.goal)}</strong>,
-              estrés <strong>{translateStress(latestAssessment.stress)}</strong>,
-              sueño <strong>{translateSleep(latestAssessment.sleep)}</strong>.
+              Estás viendo recomendaciones priorizadas según tu análisis más reciente:{" "}
+              <strong>{latestContextNarrative}</strong>
             </div>
-          ) : smartMarketplaceEnabled && !latestAssessment ? (
+          ) : smartMarketplaceEnabled && !analysis?.productRecommendations?.length ? (
             <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               Tu plan ya permite una experiencia más inteligente, pero todavía no
-              hay un análisis reciente para personalizar el ranking.
+              hay un análisis reciente con suficiente contexto para personalizar el ranking.
               <div className="mt-3">
                 <Link
                   href="/quiz"
@@ -373,16 +538,16 @@ export default function MarketplacePage() {
             </div>
           )}
 
-          <div className="mt-8 grid gap-4 md:grid-cols-4">
+          <div className="mt-8 grid gap-4 md:grid-cols-5">
             <StatCard
-              title="Productos"
-              value={`${PRODUCTS.length}`}
-              subtitle="Catálogo disponible"
+              title="Ingredientes"
+              value={`${rawRecommendations.length}`}
+              subtitle="Recomendaciones actualmente disponibles"
             />
             <StatCard
-              title="Categorías"
-              value="5"
-              subtitle="Energía, estrés, sueño, enfoque y general"
+              title="Comparación"
+              value="3 tiers"
+              subtitle="Excelente, Muy buena y Buena"
             />
             <StatCard
               title="Modo actual"
@@ -402,16 +567,21 @@ export default function MarketplacePage() {
             <StatCard
               title="Experiencia"
               value={premiumMarketplaceEnabled ? "Premium" : "Base"}
-              subtitle="Nivel actual del catálogo"
+              subtitle="Nivel actual del marketplace"
+            />
+            <StatCard
+              title="Filtrados"
+              value={`${filteredIngredients.length}`}
+              subtitle="Ingredientes visibles con filtros actuales"
             />
           </div>
         </section>
 
         <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">
-                Buscar producto
+                Buscar ingrediente o producto
               </label>
               <input
                 type="text"
@@ -437,22 +607,40 @@ export default function MarketplacePage() {
                 <option value="sleep">Sueño</option>
                 <option value="focus">Enfoque</option>
                 <option value="general">Salud general</option>
+                <option value="metabolic">Metabólico</option>
+                <option value="recovery">Recuperación</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700">
-                Prioridad
+                Evidencia
               </label>
               <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as PriorityFilter)}
+                value={evidence}
+                onChange={(e) => setEvidence(e.target.value as EvidenceFilter)}
                 className="mt-2 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
               >
                 <option value="all">Todas</option>
                 <option value="high">Alta</option>
-                <option value="medium">Media</option>
-                <option value="low">Baja</option>
+                <option value="moderate">Moderada</option>
+                <option value="limited">Limitada</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">
+                Tier disponible
+              </label>
+              <select
+                value={tier}
+                onChange={(e) => setTier(e.target.value as TierFilter)}
+                className="mt-2 w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:border-slate-900"
+              >
+                <option value="all">Todos</option>
+                <option value="excellent">Excelente</option>
+                <option value="very_good">Muy buena</option>
+                <option value="good">Buena</option>
               </select>
             </div>
           </div>
@@ -473,7 +661,7 @@ export default function MarketplacePage() {
           </div>
         ) : (
           <>
-            {smartMarketplaceEnabled && (
+            {smartMarketplaceEnabled && topRecommended.length > 0 && (
               <section className="mt-8">
                 <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                   <div>
@@ -487,123 +675,318 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="text-sm text-slate-500">
-                    {topRecommended.length} producto(s)
+                    {topRecommended.length} ingrediente(s)
                   </div>
                 </div>
 
-                {topRecommended.length === 0 ? (
-                  <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
-                    <h3 className="text-xl font-semibold text-slate-900">
-                      No encontramos recomendaciones personalizadas
-                    </h3>
-                    <p className="mt-3 text-slate-600">
-                      {hasAssessmentForRanking
-                        ? "Ajusta los filtros para encontrar coincidencias más útiles."
-                        : "Haz un análisis para que el ranking tenga más contexto."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    {topRecommended.map((product, index) => (
-                      <ProductCard
-                        key={product.slug}
-                        product={product}
-                        rankPosition={index + 1}
-                        highlight
-                        showReasons
-                        premiumMarketplaceEnabled={premiumMarketplaceEnabled}
-                      />
-                    ))}
-                  </div>
-                )}
+                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                  {topRecommended.map((item, index) => {
+                    const selected =
+                      item.options.excellent ??
+                      item.options.veryGood ??
+                      item.options.good;
+
+                    return (
+                      <button
+                        key={item.ingredientSlug}
+                        type="button"
+                        onClick={() =>
+                          setSelectedIngredientSlug(item.ingredientSlug)
+                        }
+                        className={`rounded-3xl p-6 text-left shadow-sm ring-1 transition ${
+                          selectedIngredient?.ingredientSlug === item.ingredientSlug
+                            ? "border border-blue-200 bg-white ring-blue-200"
+                            : "bg-white ring-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                              {item.evidenceLevel
+                                ? translateEvidence(item.evidenceLevel)
+                                : "Sin clasificar"}
+                            </span>
+
+                            {selected && (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                {translateTier(selected.product.budgetTier)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+                            {index + 1}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 text-xs font-semibold text-blue-600">
+                          Recomendado según tu perfil
+                        </div>
+
+                        <h3 className="mt-5 text-xl font-semibold text-slate-900">
+                          {item.ingredientName}
+                        </h3>
+
+                        <p className="mt-2 text-sm text-slate-600">
+                          Match score: <strong>{item.matchScore}/100</strong>
+                        </p>
+
+                        <div className="mt-5 rounded-xl bg-slate-50 p-4">
+                          <div className="text-sm font-semibold text-slate-900">
+                            ¿Por qué aparece aquí?
+                          </div>
+
+                          <ul className="mt-2 space-y-2">
+                            {item.whyMatched.slice(0, 3).map((reason, idx) => (
+                              <li key={idx} className="text-sm text-slate-600">
+                                • {reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {selected ? (
+                          <div className="mt-5 rounded-xl bg-slate-50 p-4">
+                            <div className="text-sm text-slate-500">
+                              Producto destacado
+                            </div>
+                            <div className="mt-1 text-lg font-semibold text-slate-900">
+                              {selected.product.productName}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-600">
+                              {selected.product.brand}
+                            </div>
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </section>
             )}
 
-            {!smartMarketplaceEnabled && (
+            {selectedIngredient ? (
+              <>
+                <div className="mt-8">
+                  <MarketplaceHero
+                    plan={plan}
+                    personalized={smartMarketplaceEnabled}
+                    ingredientName={selectedIngredient.ingredientName}
+                  />
+                </div>
+
+                <div className="mt-8">
+                  <IngredientHighlightCard item={selectedIngredient} />
+                </div>
+
+                <section className="mt-8">
+                  <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        Comparador principal
+                      </h2>
+                      <p className="mt-2 text-slate-600">
+                        Compara tres niveles de producto para el ingrediente
+                        actualmente priorizado.
+                      </p>
+                    </div>
+
+                    <div className="text-sm text-slate-500">
+                      {selectedIngredient.ingredientName}
+                    </div>
+                  </div>
+
+                  <BudgetComparisonGrid ingredient={selectedIngredient} />
+                </section>
+
+                <section className="mt-12">
+                  <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        Selector de ingrediente
+                      </h2>
+                      <p className="mt-2 text-slate-600">
+                        Cambia entre ingredientes priorizados y revisa su
+                        comparador de producto correspondiente.
+                      </p>
+                    </div>
+
+                    <div className="text-sm text-slate-500">
+                      {filteredIngredients.length} ingrediente(s)
+                    </div>
+                  </div>
+
+                  {filteredIngredients.length === 0 ? (
+                    <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+                      <h3 className="text-xl font-semibold text-slate-900">
+                        No encontramos ingredientes con esos filtros
+                      </h3>
+                      <p className="mt-3 text-slate-600">
+                        Ajusta la búsqueda o los filtros para encontrar más opciones.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                      {filteredIngredients.map((item, index) => {
+                        const selected =
+                          item.options.excellent ??
+                          item.options.veryGood ??
+                          item.options.good;
+
+                        return (
+                          <button
+                            key={item.ingredientSlug}
+                            type="button"
+                            onClick={() =>
+                              setSelectedIngredientSlug(item.ingredientSlug)
+                            }
+                            className={`rounded-3xl p-6 text-left shadow-sm ring-1 transition ${
+                              selectedIngredient.ingredientSlug ===
+                              item.ingredientSlug
+                                ? "border border-blue-200 bg-white ring-blue-200"
+                                : "bg-white ring-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex flex-wrap gap-2">
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                  {translateEvidence(
+                                    item.evidenceLevel || "limited"
+                                  )}
+                                </span>
+
+                                {selected && (
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                    {translateTier(selected.product.budgetTier)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+                                {index + 1}
+                              </div>
+                            </div>
+
+                            <h3 className="mt-5 text-xl font-semibold text-slate-900">
+                              {item.ingredientName}
+                            </h3>
+
+                            <p className="mt-1 text-sm text-slate-500">
+                              Score {item.matchScore}/100
+                            </p>
+
+                            <div className="mt-4 rounded-xl bg-slate-50 p-4">
+                              <div className="text-sm font-semibold text-slate-900">
+                                Resumen rápido
+                              </div>
+                              <p className="mt-2 text-sm text-slate-600">
+                                {item.whyMatched?.[0] ||
+                                  "Ingrediente disponible dentro del catálogo actual."}
+                              </p>
+                            </div>
+
+                            {selected ? (
+                              <div className="mt-5 rounded-xl bg-slate-50 p-4">
+                                <div className="text-sm text-slate-500">
+                                  Producto visible
+                                </div>
+                                <div className="mt-1 text-lg font-semibold text-slate-900">
+                                  {selected.product.productName}
+                                </div>
+                                <div className="mt-1 text-sm text-slate-600">
+                                  {selected.product.brand}
+                                </div>
+                              </div>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                {relatedIngredients.length > 0 && (
+                  <section className="mt-12">
+                    <RelatedRecommendationsSection items={relatedIngredients} />
+                  </section>
+                )}
+
+                {remainingIngredients.length > 0 && (
+                  <section className="mt-12 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+                      <div>
+                        <h2 className="text-2xl font-bold text-slate-900">
+                          Más ingredientes del catálogo actual
+                        </h2>
+                        <p className="mt-2 text-slate-600">
+                          Ingredientes que siguen dentro del perfil actual pero no están arriba del todo en tu selección visible.
+                        </p>
+                      </div>
+
+                      <div className="text-sm text-slate-500">
+                        {remainingIngredients.length} ingrediente(s)
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {remainingIngredients.map((item) => (
+                        <button
+                          key={item.ingredientSlug}
+                          type="button"
+                          onClick={() =>
+                            setSelectedIngredientSlug(item.ingredientSlug)
+                          }
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-white"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-lg font-semibold text-slate-900">
+                              {item.ingredientName}
+                            </div>
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                              {item.matchScore}/100
+                            </span>
+                          </div>
+
+                          <p className="mt-3 text-sm leading-6 text-slate-600">
+                            {item.whyMatched?.[0] ||
+                              "Ingrediente visible dentro del catálogo actual."}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            ) : (
               <section className="mt-8">
                 <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm ring-1 ring-slate-200">
                   <h2 className="text-2xl font-bold text-slate-900">
-                    Catálogo general disponible
+                    Catálogo base disponible
                   </h2>
                   <p className="mt-3 text-slate-600">
-                    Estás viendo el catálogo base del marketplace. Las
-                    recomendaciones inteligentes según tu análisis están
-                    disponibles en los planes Pro y Premium.
+                    Todavía no hay suficiente contexto para construir un comparador
+                    premium completo. Haz un análisis reciente para activar la
+                    experiencia personalizada.
                   </p>
 
-                  <div className="mt-5 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-                    <div className="text-sm font-semibold text-slate-900">
-                      Lo que desbloqueas al mejorar tu plan
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Un catálogo que deja de ser genérico y empieza a sentirse
-                      alineado con tu objetivo, tu estrés y tu descanso.
-                    </p>
-                  </div>
-
                   <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                    <Link
-                      href="/pricing"
-                      className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      Desbloquear marketplace inteligente
-                    </Link>
-
                     <Link
                       href="/quiz"
                       className="inline-flex rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700"
                     >
                       Hacer análisis
                     </Link>
+
+                    <Link
+                      href="/results"
+                      className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Volver a resultados
+                    </Link>
                   </div>
                 </div>
               </section>
             )}
-
-            <section className="mt-12">
-              <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    {smartMarketplaceEnabled
-                      ? "Más suplementos del catálogo"
-                      : "Catálogo completo"}
-                  </h2>
-                  <p className="mt-2 text-slate-600">
-                    Sigue explorando opciones y compara cuál encaja mejor con lo
-                    que estás buscando.
-                  </p>
-                </div>
-
-                <div className="text-sm text-slate-500">
-                  {remainingProducts.length} producto(s)
-                </div>
-              </div>
-
-              {remainingProducts.length === 0 ? (
-                <div className="rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
-                  <h3 className="text-xl font-semibold text-slate-900">
-                    No hay más productos
-                  </h3>
-                  <p className="mt-3 text-slate-600">
-                    Cambia los filtros para ver más opciones.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                  {remainingProducts.map((product, index) => (
-                    <ProductCard
-                      key={product.slug}
-                      product={product}
-                      rankPosition={
-                        smartMarketplaceEnabled ? index + 4 : index + 1
-                      }
-                      showReasons={smartMarketplaceEnabled}
-                      premiumMarketplaceEnabled={premiumMarketplaceEnabled}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
 
             {canShowUpgradePrompt && (
               <section className="mt-8">
@@ -614,105 +997,6 @@ export default function MarketplacePage() {
         )}
       </div>
     </main>
-  );
-}
-
-function ProductCard({
-  product,
-  rankPosition,
-  highlight,
-  showReasons = true,
-  premiumMarketplaceEnabled = false,
-}: {
-  product: RankedProduct;
-  rankPosition: number;
-  highlight?: boolean;
-  showReasons?: boolean;
-  premiumMarketplaceEnabled?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-3xl p-6 shadow-sm ring-1 transition ${
-        highlight
-          ? "border border-blue-200 bg-white ring-blue-200"
-          : "bg-white ring-slate-200 hover:bg-slate-50"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex flex-wrap gap-2">
-          <CategoryBadge value={product.category} />
-          <PriorityBadge value={product.priority} />
-          {premiumMarketplaceEnabled && (
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-              Premium
-            </span>
-          )}
-        </div>
-
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
-          {rankPosition}
-        </div>
-      </div>
-
-      {highlight && (
-        <div className="mt-3 text-xs font-semibold text-blue-600">
-          Recomendado según tu perfil
-        </div>
-      )}
-
-      <h3 className="mt-5 text-xl font-semibold text-slate-900">
-        {product.productName}
-      </h3>
-
-      <p className="mt-1 text-sm text-slate-500">{product.brand}</p>
-
-      <p className="mt-4 text-slate-600">{product.supplementName}</p>
-
-      <div className="mt-5 rounded-xl bg-slate-50 p-4">
-        <div className="text-sm font-semibold text-slate-900">
-          ¿Por qué aparece aquí?
-        </div>
-
-        {showReasons && product.reasons.length > 0 ? (
-          <ul className="mt-2 space-y-2">
-            {product.reasons.map((reason, index) => (
-              <li key={index} className="text-sm text-slate-600">
-                • {reason}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-slate-600">
-            Producto disponible dentro del catálogo general.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-6 rounded-xl bg-slate-50 p-4">
-        <div className="text-sm text-slate-500">Precio estimado</div>
-        <div className="mt-1 text-lg font-semibold text-slate-900">
-          {product.price}
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-3">
-        <Link
-          href={`/marketplace/${product.slug}`}
-          className="inline-flex w-full justify-center rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          Ver detalle
-        </Link>
-
-        <a
-          href={product.buyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex w-full justify-center rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700"
-        >
-          Ver producto
-        </a>
-      </div>
-    </div>
   );
 }
 
@@ -734,67 +1018,57 @@ function StatCard({
   );
 }
 
-function CategoryBadge({ value }: { value: Product["category"] }) {
-  return (
-    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-      {translateCategory(value)}
-    </span>
-  );
-}
+function inferCategoryFromIngredient(name: string): CategoryFilter {
+  const normalized = name.toLowerCase();
 
-function PriorityBadge({ value }: { value: Product["priority"] }) {
-  const styles =
-    value === "high"
-      ? "bg-red-100 text-red-700"
-      : value === "medium"
-      ? "bg-amber-100 text-amber-700"
-      : "bg-slate-100 text-slate-700";
+  if (normalized.includes("magnesium")) return "sleep";
+  if (normalized.includes("melatonin")) return "sleep";
+  if (normalized.includes("theanine")) return "focus";
+  if (normalized.includes("rhodiola")) return "energy";
+  if (normalized.includes("coq10")) return "energy";
+  if (normalized.includes("omega")) return "general";
+  if (normalized.includes("vitamin d")) return "general";
+  if (normalized.includes("ashwagandha")) return "stress";
+  if (normalized.includes("glycine")) return "recovery";
+  if (normalized.includes("electrolyte")) return "recovery";
+  if (normalized.includes("probiotic")) return "general";
 
-  const label =
-    value === "high"
-      ? "Prioridad alta"
-      : value === "medium"
-      ? "Prioridad media"
-      : "Prioridad baja";
-
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>
-      {label}
-    </span>
-  );
-}
-
-function translateCategory(value: Product["category"]) {
-  const labels: Record<Product["category"], string> = {
-    energy: "Energía",
-    stress: "Estrés",
-    sleep: "Sueño",
-    focus: "Enfoque",
-    general: "Salud general",
-  };
-
-  return labels[value];
+  return "general";
 }
 
 function translateGoal(value: string) {
   if (value === "energy") return "Más energía";
   if (value === "focus") return "Mejor concentración";
   if (value === "sleep") return "Dormir mejor";
-  if (value === "health") return "Salud general";
+  if (value === "general_health") return "Salud general";
+  if (value === "weight") return "Peso / soporte metabólico";
+  if (value === "recovery") return "Recuperación";
   return value || "-";
 }
 
-function translateStress(value: string) {
-  if (value === "low") return "Bajo";
-  if (value === "medium") return "Medio";
-  if (value === "high") return "Alto";
-  return value || "-";
+function translateStressLevel(value?: number) {
+  if (!value) return "-";
+  if (value <= 2) return "Bajo";
+  if (value === 3) return "Medio";
+  return "Alto";
 }
 
-function translateSleep(value: string) {
-  if (value === "5") return "Menos de 5 horas";
-  if (value === "6") return "6 horas";
-  if (value === "7") return "7 horas";
-  if (value === "8") return "8 o más horas";
-  return value || "-";
+function translateSleepHours(value?: number) {
+  if (value == null) return "-";
+  if (value < 5) return "Menos de 5 horas";
+  if (value < 6.5) return "6 horas aprox.";
+  if (value < 7.5) return "7 horas aprox.";
+  return "8 o más horas";
+}
+
+function translateTier(value: "excellent" | "very_good" | "good") {
+  if (value === "excellent") return "Excelente";
+  if (value === "very_good") return "Muy buena";
+  return "Buena";
+}
+
+function translateEvidence(value: "high" | "moderate" | "limited") {
+  if (value === "high") return "Evidencia alta";
+  if (value === "moderate") return "Evidencia moderada";
+  return "Evidencia limitada";
 }

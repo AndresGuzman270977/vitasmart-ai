@@ -2,43 +2,175 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { getRecommendations } from "../lib/recommendations";
+import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import { saveAssessment, type AssessmentAiMode } from "../lib/saveAssessment";
 import {
   getPlanLimits,
   normalizePlan,
   type PlanType,
 } from "../lib/planLimits";
-import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import PremiumGate from "../../components/PremiumGate";
 import UpgradePrompt from "../../components/UpgradePrompt";
-import { supabase } from "../lib/supabase";
+import ResultHero from "../../components/health/ResultHero";
+import ResultSubscoresGrid from "../../components/health/ResultSubscoresGrid";
+import ResultInsightsPanel from "../../components/health/ResultInsightsPanel";
+import FollowUpPanel from "../../components/health/FollowUpPanel";
 
-type AdvancedRecommendation = {
-  title: string;
-  description: string;
+type ConfidenceLevel = "high" | "moderate" | "limited";
+type RequestedAiMode = "basic" | "advanced";
+type AppliedAiMode = "basic" | "advanced";
+
+type AssessmentInput = {
+  age?: number;
+  sex?: "male" | "female";
+  weightKg?: number;
+  heightCm?: number;
+  waistCm?: number;
+  stressLevel?: number;
+  sleepHours?: number;
+  sleepQuality?: number;
+  fatigueLevel?: number;
+  focusDifficulty?: number;
+  physicalActivity?: number;
+  alcoholUse?: number;
+  smokingStatus?: string;
+  sunExposure?: number;
+  hydrationLevel?: number;
+  ultraProcessedFoodLevel?: number;
+  bloodPressureKnown?: boolean;
+  systolicBp?: number;
+  diastolicBp?: number;
+  mainGoal?: string;
+  baseConditions?: string[];
+  currentMedications?: string[];
+  currentSupplements?: string[];
 };
 
-type AiHealthAnalysis = {
-  score: number;
-  summary: string;
-  factors: string[];
-  advancedRecommendations: AdvancedRecommendation[];
+type BiomarkerInput = {
+  fasting_glucose?: number;
+  hba1c?: number;
+  total_cholesterol?: number;
+  hdl?: number;
+  ldl?: number;
+  triglycerides?: number;
+  vitamin_d?: number;
+  b12?: number;
+  ferritin?: number;
+  tsh?: number;
+  creatinine?: number;
+  ast?: number;
+  alt?: number;
+  lab_date?: string;
 };
 
-type BackendAnalysisResponse = {
+type ProductRecommendationView = {
+  product: {
+    slug: string;
+    ingredientSlug: string;
+    productName: string;
+    brand: string;
+    manufacturer: string;
+    form: "capsule" | "tablet" | "softgel" | "powder" | "liquid" | "gummy";
+    presentation: string;
+    servings: number | null;
+    priceUsd: number | null;
+    priceLabel: string;
+    estimatedCostPerDayUsd: number | null;
+    budgetTier: "excellent" | "very_good" | "good";
+    qualityScore: number;
+    valueScore: number;
+    qualitySeals: string[];
+    qualityNotes: string[];
+    imageUrl: string;
+    buyUrl: string;
+    availableMarkets: ("amazon" | "iherb" | "direct")[];
+  };
+  narratives: {
+    whyForUser: string;
+    scienceSummary: string;
+    labQualitySummary: string;
+    howToTake: string;
+    restrictionsSummary: string;
+    sideEffectsSummary: string;
+    budgetReason: string;
+  };
+  fitScore: number;
+  qualityScore: number;
+  valueScore: number;
+};
+
+type TopIngredientRecommendationView = {
+  ingredientSlug: string;
+  ingredientName: string;
+  matchScore: number;
+  safetyDecision: "allow" | "allow_with_caution" | "high_caution" | "avoid";
+  whyMatched: string[];
+  cautions: string[];
+  evidenceLevel?: "high" | "moderate" | "limited";
+  evidenceSummary?: string;
+  scientificContext?: string;
+  options: {
+    excellent?: ProductRecommendationView;
+    veryGood?: ProductRecommendationView;
+    good?: ProductRecommendationView;
+  };
+};
+
+type PersistenceInfo = {
+  saved?: boolean;
+  assessmentId?: number | null;
+  reason?: string | null;
+  details?: string | null;
+};
+
+type HealthAnalysisResponse = {
+  plan: PlanType;
+  requestedAiMode: RequestedAiMode;
+  appliedAiMode: AppliedAiMode;
+  advancedAI: boolean;
+  wasDowngraded: boolean;
+  upgradeRequired: boolean;
+  upgradeMessage: string | null;
+  assessmentVersion: string;
+  scores: {
+    healthScore: number;
+    sleepScore: number | null;
+    stressScore: number | null;
+    energyScore: number | null;
+    focusScore: number | null;
+    metabolicScore: number | null;
+  };
+  confidence: {
+    confidenceLevel: ConfidenceLevel;
+    confidenceExplanation: string;
+    completenessScore: number;
+  };
+  summaries: {
+    executiveSummary: string;
+    clinicalStyleSummary: string;
+    scoreNarrative: string;
+    professionalFollowUpAdvice: string;
+  };
+  insights: {
+    strengths: string[];
+    mainDrivers: string[];
+    priorityActions: string[];
+    riskSignals: string[];
+  };
+  userNeeds: {
+    dominantNeeds: string[];
+    secondaryNeeds: string[];
+  };
+  advancedRecommendations: string[];
+  productRecommendations: TopIngredientRecommendationView[];
+  persistence?: PersistenceInfo;
+};
+
+type QuizDraft = {
   plan?: PlanType;
-  requestedAiMode?: AssessmentAiMode;
-  appliedAiMode?: AssessmentAiMode;
-  advancedAI?: boolean;
-  wasDowngraded?: boolean;
-  upgradeRequired?: boolean;
-  upgradeMessage?: string | null;
-  score: number;
-  summary: string;
-  factors: string[];
-  advancedRecommendations?: AdvancedRecommendation[];
+  requestedAiMode?: RequestedAiMode;
+  assessment: AssessmentInput;
+  biomarkers?: BiomarkerInput;
 };
 
 type LockedPreviewItem = {
@@ -46,17 +178,20 @@ type LockedPreviewItem = {
   description: string;
 };
 
+const QUIZ_STORAGE_KEY = "vitaSmartQuizDraft";
+const LAST_ANALYSIS_CACHE_KEY = "vitaSmartLastHealthAnalysis";
+
 export default function ResultsPage() {
   return (
     <Suspense
       fallback={
         <main className="min-h-screen bg-slate-50 px-6 py-16">
-          <div className="mx-auto max-w-5xl">
-            <div className="rounded-2xl bg-white p-8 shadow-sm">
+          <div className="mx-auto max-w-6xl">
+            <div className="rounded-3xl bg-white p-8 shadow-sm">
               <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
                 VitaSmart AI · Resultados
               </div>
-              <h1 className="mb-4 text-3xl font-bold">
+              <h1 className="mb-4 text-3xl font-bold tracking-tight text-slate-900">
                 Tu lectura personalizada
               </h1>
               <p className="text-slate-600">Cargando resultados...</p>
@@ -71,56 +206,40 @@ export default function ResultsPage() {
 }
 
 function ResultsPageContent() {
-  const searchParams = useSearchParams();
-
-  const formData = {
-    age: searchParams.get("age") || "",
-    sex: searchParams.get("sex") || "",
-    stress: searchParams.get("stress") || "",
-    sleep: searchParams.get("sleep") || "",
-    goal: searchParams.get("goal") || "",
-  };
-
-  const recommendations = useMemo(() => {
-    return getRecommendations(formData);
-  }, [
-    formData.age,
-    formData.sex,
-    formData.stress,
-    formData.sleep,
-    formData.goal,
-  ]);
-
-  const [analysis, setAnalysis] = useState<AiHealthAnalysis | null>(null);
-  const [loadingExplanation, setLoadingExplanation] = useState(true);
-  const [explanationError, setExplanationError] = useState("");
-  const [saveNotice, setSaveNotice] = useState("");
   const [plan, setPlan] = useState<PlanType>("free");
   const [planLoading, setPlanLoading] = useState(true);
-  const [appliedAiMode, setAppliedAiMode] =
-    useState<AssessmentAiMode>("basic");
+
+  const [analysis, setAnalysis] = useState<HealthAnalysisResponse | null>(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(true);
+  const [analysisError, setAnalysisError] = useState("");
+
+  const [saveNotice, setSaveNotice] = useState("");
+
   const [requestedAiMode, setRequestedAiMode] =
-    useState<AssessmentAiMode>("advanced");
+    useState<RequestedAiMode>("advanced");
+  const [appliedAiMode, setAppliedAiMode] = useState<AppliedAiMode>("basic");
   const [upgradeRequired, setUpgradeRequired] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const [wasDowngraded, setWasDowngraded] = useState(false);
 
+  const [draft, setDraft] = useState<QuizDraft | null>(null);
+
   useEffect(() => {
     let ignore = false;
 
-    async function generateExplanation() {
+    async function loadPlanAndAnalysis() {
       try {
         if (!ignore) {
-          setLoadingExplanation(true);
           setPlanLoading(true);
-          setExplanationError("");
-          setAnalysis(null);
+          setLoadingAnalysis(true);
+          setAnalysisError("");
           setSaveNotice("");
+          setAnalysis(null);
           setUpgradeRequired(false);
           setUpgradeMessage("");
           setWasDowngraded(false);
-          setAppliedAiMode("basic");
           setRequestedAiMode("advanced");
+          setAppliedAiMode("basic");
         }
 
         let resolvedPlan: PlanType = "free";
@@ -129,8 +248,8 @@ function ResultsPageContent() {
           await ensureUserProfile();
           const profile = await getCurrentUserProfile();
           resolvedPlan = normalizePlan(profile?.plan);
-        } catch (profileError) {
-          console.error("No se pudo cargar el perfil del usuario:", profileError);
+        } catch (error) {
+          console.error("No se pudo resolver el plan del usuario:", error);
           resolvedPlan = "free";
         }
 
@@ -138,102 +257,246 @@ function ResultsPageContent() {
           setPlan(resolvedPlan);
         }
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const rawDraft =
+          typeof window !== "undefined"
+            ? sessionStorage.getItem(QUIZ_STORAGE_KEY)
+            : null;
 
-        const accessToken = session?.access_token || "";
-
-        const response = await fetch("/api/ai-explanation", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({
-            ...formData,
-            requestedAiMode: "advanced",
-          }),
-        });
-
-        const data = (await response.json()) as BackendAnalysisResponse;
-
-        if (!response.ok) {
+        if (!rawDraft) {
           throw new Error(
-            data?.upgradeMessage ||
-              (data as { error?: string }).error ||
-              "No se pudo generar el análisis."
+            "No encontramos un análisis reciente en sesión. Por favor completa nuevamente el cuestionario."
           );
         }
 
-        const backendPlan = normalizePlan(data.plan || resolvedPlan);
-        const backendAppliedAiMode =
-          data.appliedAiMode === "advanced" ? "advanced" : "basic";
-        const backendRequestedAiMode =
-          data.requestedAiMode === "advanced" ? "advanced" : "basic";
-        const backendAdvancedAI = Boolean(data.advancedAI);
+        const parsedDraft = JSON.parse(rawDraft) as QuizDraft;
+
+        if (!parsedDraft?.assessment) {
+          throw new Error(
+            "El borrador del cuestionario está incompleto. Por favor vuelve a realizar el análisis."
+          );
+        }
+
+        if (!ignore) {
+          setDraft(parsedDraft);
+        }
+
+        const payload = {
+          plan: parsedDraft.plan ?? resolvedPlan,
+          requestedAiMode: parsedDraft.requestedAiMode ?? "advanced",
+          assessment: parsedDraft.assessment,
+          biomarkers: parsedDraft.biomarkers,
+        };
+
+        let result: HealthAnalysisResponse | null = null;
+
+        const cachedAnalysis =
+          typeof window !== "undefined"
+            ? sessionStorage.getItem(LAST_ANALYSIS_CACHE_KEY)
+            : null;
+
+        if (cachedAnalysis) {
+          try {
+            const parsedCached = JSON.parse(
+              cachedAnalysis
+            ) as HealthAnalysisResponse;
+
+            if (
+              parsedCached?.assessmentVersion &&
+              parsedCached?.scores?.healthScore != null
+            ) {
+              result = parsedCached;
+            }
+          } catch {
+            result = null;
+          }
+        }
+
+        if (!result) {
+          const response = await fetch("/api/health-analysis", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const data = (await response.json()) as
+            | HealthAnalysisResponse
+            | { error?: string; fieldErrors?: string[] };
+
+          if (!response.ok) {
+            throw new Error(
+              (data as { error?: string }).error ||
+                "No se pudo generar el análisis."
+            );
+          }
+
+          result = data as HealthAnalysisResponse;
+
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(
+              LAST_ANALYSIS_CACHE_KEY,
+              JSON.stringify(result)
+            );
+          }
+        }
+
+        const backendPlan = normalizePlan(result.plan || resolvedPlan);
 
         if (!ignore) {
           setPlan(backendPlan);
-          setRequestedAiMode(backendRequestedAiMode);
-          setAppliedAiMode(backendAppliedAiMode);
-          setUpgradeRequired(Boolean(data.upgradeRequired));
-          setUpgradeMessage(data.upgradeMessage || "");
-          setWasDowngraded(Boolean(data.wasDowngraded));
+          setAnalysis(result);
+          setRequestedAiMode(result.requestedAiMode || "advanced");
+          setAppliedAiMode(result.appliedAiMode || "basic");
+          setUpgradeRequired(Boolean(result.upgradeRequired));
+          setUpgradeMessage(result.upgradeMessage || "");
+          setWasDowngraded(Boolean(result.wasDowngraded));
         }
 
-        const nextAnalysis: AiHealthAnalysis = {
-          score: data.score,
-          summary: data.summary,
-          factors: Array.isArray(data.factors) ? data.factors : [],
-          advancedRecommendations: Array.isArray(data.advancedRecommendations)
-            ? data.advancedRecommendations
-            : [],
-        };
-
-        if (!ignore) {
-          setAnalysis(nextAnalysis);
-
-          try {
-            const saveResult = await saveAssessment(
-              {
-                age: formData.age,
-                sex: formData.sex,
-                stress: formData.stress,
-                sleep: formData.sleep,
-                goal: formData.goal,
-                score: nextAnalysis.score,
-                summary: nextAnalysis.summary,
-                factors: nextAnalysis.factors,
-              },
-              {
-                aiMode: backendAdvancedAI ? "advanced" : "basic",
-                generatedBy: "results-page",
-              }
+        if (result.persistence?.saved) {
+          if (!ignore) {
+            setSaveNotice(
+              result.appliedAiMode === "advanced"
+                ? "Análisis avanzado guardado correctamente en tu historial."
+                : "Análisis base guardado correctamente en tu historial."
             );
+          }
+          return;
+        }
 
+        try {
+          const assessment = parsedDraft.assessment;
+          const biomarkers = parsedDraft.biomarkers;
+
+          const bmi =
+            typeof assessment.weightKg === "number" &&
+            typeof assessment.heightCm === "number" &&
+            assessment.heightCm > 0
+              ? Number(
+                  (
+                    assessment.weightKg /
+                    Math.pow(assessment.heightCm / 100, 2)
+                  ).toFixed(1)
+                )
+              : null;
+
+          const saveResult = await saveAssessment(
+            {
+              assessmentVersion: result.assessmentVersion,
+              plan: backendPlan,
+              aiMode:
+                result.appliedAiMode === "advanced" ? "advanced" : "basic",
+              generatedBy: "results-page-v2",
+
+              age: assessment.age,
+              sex: assessment.sex,
+
+              weightKg: assessment.weightKg ?? null,
+              heightCm: assessment.heightCm ?? null,
+              waistCm: assessment.waistCm ?? null,
+              bmi,
+
+              stressLevel: assessment.stressLevel ?? null,
+              sleepHours: assessment.sleepHours ?? null,
+              sleepQuality: assessment.sleepQuality ?? null,
+              fatigueLevel: assessment.fatigueLevel ?? null,
+              focusDifficulty: assessment.focusDifficulty ?? null,
+
+              physicalActivity: assessment.physicalActivity ?? null,
+              alcoholUse: assessment.alcoholUse ?? null,
+              smokingStatus: assessment.smokingStatus ?? null,
+              sunExposure: assessment.sunExposure ?? null,
+              hydrationLevel: assessment.hydrationLevel ?? null,
+              ultraProcessedFoodLevel:
+                assessment.ultraProcessedFoodLevel ?? null,
+
+              bloodPressureKnown: Boolean(assessment.bloodPressureKnown),
+              systolicBp: assessment.systolicBp ?? null,
+              diastolicBp: assessment.diastolicBp ?? null,
+
+              mainGoal: assessment.mainGoal,
+
+              baseConditions: assessment.baseConditions ?? [],
+              currentMedications: assessment.currentMedications ?? [],
+              currentSupplements: assessment.currentSupplements ?? [],
+
+              healthScore: result.scores.healthScore,
+              sleepScore: result.scores.sleepScore,
+              stressScore: result.scores.stressScore,
+              energyScore: result.scores.energyScore,
+              focusScore: result.scores.focusScore,
+              metabolicScore: result.scores.metabolicScore,
+
+              confidenceLevel: result.confidence.confidenceLevel,
+              confidenceExplanation: result.confidence.confidenceExplanation,
+
+              executiveSummary: result.summaries.executiveSummary,
+              clinicalStyleSummary: result.summaries.clinicalStyleSummary,
+              scoreNarrative: result.summaries.scoreNarrative,
+              professionalFollowUpAdvice:
+                result.summaries.professionalFollowUpAdvice,
+
+              strengths: result.insights.strengths,
+              mainDrivers: result.insights.mainDrivers,
+              priorityActions: result.insights.priorityActions,
+              riskSignals: result.insights.riskSignals,
+              factors: [
+                ...result.insights.mainDrivers,
+                ...result.userNeeds.dominantNeeds.map(humanizeNeed),
+              ].slice(0, 8),
+
+              biomarkers: biomarkers
+                ? {
+                    fasting_glucose: biomarkers.fasting_glucose ?? null,
+                    hba1c: biomarkers.hba1c ?? null,
+                    total_cholesterol: biomarkers.total_cholesterol ?? null,
+                    hdl: biomarkers.hdl ?? null,
+                    ldl: biomarkers.ldl ?? null,
+                    triglycerides: biomarkers.triglycerides ?? null,
+                    vitamin_d: biomarkers.vitamin_d ?? null,
+                    b12: biomarkers.b12 ?? null,
+                    ferritin: biomarkers.ferritin ?? null,
+                    tsh: biomarkers.tsh ?? null,
+                    creatinine: biomarkers.creatinine ?? null,
+                    ast: biomarkers.ast ?? null,
+                    alt: biomarkers.alt ?? null,
+                    lab_date: biomarkers.lab_date ?? null,
+                  }
+                : undefined,
+            },
+            {
+              aiMode:
+                result.appliedAiMode === "advanced" ? "advanced" : "basic",
+              generatedBy: "results-page-v2",
+            }
+          );
+
+          if (!ignore) {
             if (saveResult.saved) {
               setSaveNotice(
-                backendAppliedAiMode === "advanced"
+                result.appliedAiMode === "advanced"
                   ? "Análisis avanzado guardado correctamente en tu historial."
                   : "Análisis base guardado correctamente en tu historial."
               );
-            }
-
-            if (!saveResult.saved && saveResult.reason === "no-user") {
+            } else if (!saveResult.saved && saveResult.reason === "no-user") {
               setSaveNotice(
                 "Análisis generado. Inicia sesión para guardar este resultado en tu historial."
               );
-            }
-
-            if (!saveResult.saved && saveResult.reason === "plan-limit") {
+            } else if (
+              !saveResult.saved &&
+              saveResult.reason === "plan-limit"
+            ) {
               setSaveNotice(
                 `Has alcanzado el límite de análisis guardados de tu plan ${String(
                   saveResult.plan || "actual"
                 ).toUpperCase()}. Actualiza tu plan para seguir guardando resultados.`
               );
             }
-          } catch (saveError: any) {
+          }
+        } catch (saveError: any) {
+          console.error("Error guardando análisis expandido:", saveError);
+
+          if (!ignore) {
             setSaveNotice(
               saveError?.message ||
                 "El análisis se generó, pero no se pudo guardar en tu historial."
@@ -241,49 +504,45 @@ function ResultsPageContent() {
           }
         }
       } catch (error: any) {
-        console.error("Results error:", error);
+        console.error("ResultsPage v2 error:", error);
 
         if (!ignore) {
-          setExplanationError(
+          setAnalysisError(
             error?.message ||
               "No pudimos generar el análisis inteligente en este momento."
           );
         }
       } finally {
         if (!ignore) {
-          setLoadingExplanation(false);
+          setLoadingAnalysis(false);
           setPlanLoading(false);
         }
       }
     }
 
-    generateExplanation();
+    loadPlanAndAnalysis();
 
     return () => {
       ignore = true;
     };
-  }, [
-    formData.age,
-    formData.sex,
-    formData.stress,
-    formData.sleep,
-    formData.goal,
-  ]);
+  }, []);
 
   const limits = useMemo(() => getPlanLimits(plan), [plan]);
-  const advancedAIEnabled = appliedAiMode === "advanced" && limits.advancedAI;
-  const gatedRecommendations = advancedAIEnabled ? recommendations : [];
+
+  const advancedAIEnabled = useMemo(() => {
+    return analysis?.appliedAiMode === "advanced" && Boolean(limits.advancedAI);
+  }, [analysis?.appliedAiMode, limits.advancedAI]);
 
   const resultTone = useMemo(() => {
-    const score = analysis?.score ?? 0;
+    const score = analysis?.scores.healthScore ?? 0;
     if (score >= 85) return "Muy buen punto de partida";
     if (score >= 70) return "Base sólida con espacio para mejorar";
     if (score >= 55) return "Hay oportunidades claras de mejora";
     return "Conviene actuar con más intención";
-  }, [analysis?.score]);
+  }, [analysis?.scores.healthScore]);
 
   const resultNarrative = useMemo(() => {
-    const score = analysis?.score ?? 0;
+    const score = analysis?.scores.healthScore ?? 0;
     if (score >= 85) {
       return "Tu perfil actual muestra señales positivas. La clave ahora es sostener hábitos y ganar continuidad.";
     }
@@ -294,29 +553,23 @@ function ResultsPageContent() {
       return "Tu resultado sugiere que hay varias áreas donde pequeños cambios consistentes podrían generar una mejora visible.";
     }
     return "Este resultado no es una sentencia: es una oportunidad para ordenar prioridades y empezar a construir una versión más fuerte de tu bienestar.";
-  }, [analysis?.score]);
+  }, [analysis?.scores.healthScore]);
 
   const potentialScore = useMemo(() => {
-    const baseScore = analysis?.score ?? 0;
+    const baseScore = analysis?.scores.healthScore ?? 0;
     if (!baseScore) return 0;
 
     const uplift =
       baseScore >= 85 ? 6 : baseScore >= 70 ? 10 : baseScore >= 55 ? 14 : 18;
 
     return Math.min(baseScore + uplift, 96);
-  }, [analysis?.score]);
+  }, [analysis?.scores.healthScore]);
 
   const visibleAdvancedRecommendations = useMemo(() => {
     if (!analysis?.advancedRecommendations?.length) return [];
 
-    if (plan === "premium") {
-      return analysis.advancedRecommendations;
-    }
-
-    if (plan === "pro") {
-      return analysis.advancedRecommendations.slice(0, 4);
-    }
-
+    if (plan === "premium") return analysis.advancedRecommendations;
+    if (plan === "pro") return analysis.advancedRecommendations.slice(0, 4);
     return analysis.advancedRecommendations.slice(0, 2);
   }, [analysis?.advancedRecommendations, plan]);
 
@@ -328,9 +581,9 @@ function ResultsPageContent() {
         visibleAdvancedRecommendations.length
       ) || [];
 
-    const normalizedFromBackend = fromBackend.map((item) => ({
-      title: item.title,
-      description: item.description,
+    const normalizedFromBackend = fromBackend.map((item, index) => ({
+      title: `Advanced recommendation ${index + 1}`,
+      description: item,
     }));
 
     if (normalizedFromBackend.length > 0) {
@@ -391,7 +644,7 @@ function ResultsPageContent() {
             "Recomendaciones secuenciales para dormir mejor de forma sostenida.",
         },
       ],
-      health: [
+      general_health: [
         {
           title: "Estrategia integral de bienestar",
           description:
@@ -406,6 +659,40 @@ function ResultsPageContent() {
           title: "Priorización avanzada de soporte",
           description:
             "Qué conviene atacar primero según tus señales actuales.",
+        },
+      ],
+      weight: [
+        {
+          title: "Lectura metabólica ampliada",
+          description:
+            "Interpretación más profunda de soporte metabólico y prioridades de seguimiento.",
+        },
+        {
+          title: "Secuencia estratégica de mejora",
+          description:
+            "Qué conviene ajustar primero para aumentar consistencia en el objetivo corporal.",
+        },
+        {
+          title: "Ruta preventiva de seguimiento",
+          description:
+            "Señales que conviene vigilar con más intención en el tiempo.",
+        },
+      ],
+      recovery: [
+        {
+          title: "Estrategia avanzada de recuperación",
+          description:
+            "Capas extra para mejorar recuperación física y estabilidad de energía.",
+        },
+        {
+          title: "Orden de prioridades de soporte",
+          description:
+            "Qué señales conviene mejorar primero para sostener rendimiento.",
+        },
+        {
+          title: "Ajuste integral de carga y descanso",
+          description:
+            "Lectura más fina del equilibrio entre demanda y recuperación.",
         },
       ],
     };
@@ -428,44 +715,47 @@ function ResultsPageContent() {
       },
     ];
 
-    const selected =
-      fallbackByGoal[formData.goal] && fallbackByGoal[formData.goal].length
-        ? fallbackByGoal[formData.goal]
-        : genericFallback;
+    const key = draft?.assessment?.mainGoal || "general_health";
+    const selected = fallbackByGoal[key] || genericFallback;
 
     return plan === "pro" ? selected.slice(0, 1) : selected.slice(0, 3);
   }, [
     analysis?.advancedRecommendations,
     visibleAdvancedRecommendations.length,
     plan,
-    formData.goal,
+    draft?.assessment?.mainGoal,
   ]);
 
   const visibleSmartRecommendations = useMemo(() => {
-    if (advancedAIEnabled) {
-      return gatedRecommendations;
-    }
-
-    return recommendations.slice(0, 2);
-  }, [advancedAIEnabled, gatedRecommendations, recommendations]);
+    const items = analysis?.productRecommendations || [];
+    if (advancedAIEnabled) return items;
+    return items.slice(0, 2);
+  }, [advancedAIEnabled, analysis?.productRecommendations]);
 
   const hiddenSmartRecommendationsCount = Math.max(
-    recommendations.length - visibleSmartRecommendations.length,
+    (analysis?.productRecommendations?.length || 0) -
+      visibleSmartRecommendations.length,
     0
   );
 
   const showUpgradeMessaging = !planLoading && plan !== "premium";
   const showLockedAdvancedPreview =
-    !loadingExplanation &&
-    !explanationError &&
+    !loadingAnalysis &&
+    !analysisError &&
     !planLoading &&
     lockedAdvancedRecommendations.length > 0 &&
     plan !== "premium";
 
+  const showHealthBlocks = !loadingAnalysis && !analysisError && analysis;
+
+  const topProductIngredient = useMemo(() => {
+    return analysis?.productRecommendations?.[0] || null;
+  }, [analysis?.productRecommendations]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
-      <div className="mx-auto max-w-5xl">
-        <div className="rounded-2xl bg-white p-8 shadow-sm">
+      <div className="mx-auto max-w-6xl">
+        <div className="rounded-3xl bg-white p-8 shadow-sm">
           <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
             VitaSmart AI · Resultados
           </div>
@@ -484,9 +774,18 @@ function ResultsPageContent() {
               IA aplicada:{" "}
               {appliedAiMode === "advanced" ? "Avanzada" : "Básica"}
             </div>
+
+            {analysis?.confidence?.confidenceLevel ? (
+              <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600">
+                Confianza:{" "}
+                {translateConfidenceLabel(analysis.confidence.confidenceLevel)}
+              </div>
+            ) : null}
           </div>
 
-          <h1 className="mb-4 text-3xl font-bold">Tu lectura personalizada</h1>
+          <h1 className="mb-4 text-3xl font-bold tracking-tight text-slate-900">
+            Tu lectura personalizada
+          </h1>
 
           <p className="text-slate-600">
             Este resultado está diseñado para ayudarte a entender mejor tu punto
@@ -494,12 +793,51 @@ function ResultsPageContent() {
             bienestar.
           </p>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Info label="Edad" value={formData.age} />
-            <Info label="Sexo" value={translateSex(formData.sex)} />
-            <Info label="Estrés" value={translateStress(formData.stress)} />
-            <Info label="Sueño" value={translateSleep(formData.sleep)} />
-            <Info label="Objetivo" value={translateGoal(formData.goal)} />
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Info
+              label="Edad"
+              value={draft?.assessment?.age ? String(draft.assessment.age) : "-"}
+            />
+            <Info
+              label="Sexo"
+              value={translateSex(draft?.assessment?.sex || "")}
+            />
+            <Info
+              label="Peso"
+              value={
+                draft?.assessment?.weightKg
+                  ? `${draft.assessment.weightKg} kg`
+                  : "-"
+              }
+            />
+            <Info
+              label="Estatura"
+              value={
+                draft?.assessment?.heightCm
+                  ? `${draft.assessment.heightCm} cm`
+                  : "-"
+              }
+            />
+            <Info
+              label="Estrés"
+              value={translateStressLevel(draft?.assessment?.stressLevel)}
+            />
+            <Info
+              label="Sueño"
+              value={translateSleepHours(draft?.assessment?.sleepHours)}
+            />
+            <Info
+              label="Calidad de sueño"
+              value={translateFiveLevel(draft?.assessment?.sleepQuality)}
+            />
+            <Info
+              label="Actividad física"
+              value={translateFiveLevel(draft?.assessment?.physicalActivity)}
+            />
+            <Info
+              label="Objetivo"
+              value={translateGoal(draft?.assessment?.mainGoal || "")}
+            />
           </div>
 
           <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -553,47 +891,105 @@ function ResultsPageContent() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-1">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Health Score
-            </h2>
-
-            {loadingExplanation ? (
+        {loadingAnalysis ? (
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-1">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Health Score
+              </h2>
               <p className="mt-4 text-slate-600">Calculando...</p>
-            ) : explanationError ? (
-              <p className="mt-4 text-sm text-red-600">{explanationError}</p>
-            ) : (
-              <>
-                <div className="mt-4 text-5xl font-bold text-slate-900">
-                  {analysis?.score ?? "-"}
-                  <span className="text-xl text-slate-500">/100</span>
-                </div>
-                <p className="mt-3 text-sm font-semibold text-slate-900">
-                  {resultTone}
-                </p>
-                <p className="mt-2 text-sm text-slate-600">
-                  Estimación orientativa basada en tu perfil actual.
-                </p>
-              </>
-            )}
-          </div>
+            </div>
 
-          <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-2">
-            <h2 className="text-xl font-semibold text-slate-900">
-              Análisis inteligente
-            </h2>
-
-            {loadingExplanation ? (
+            <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-2">
+              <h2 className="text-xl font-semibold text-slate-900">
+                Análisis inteligente
+              </h2>
               <p className="mt-3 text-slate-600">
                 Generando análisis personalizado...
               </p>
-            ) : explanationError ? (
-              <p className="mt-3 text-red-600">{explanationError}</p>
-            ) : (
-              <>
+            </div>
+          </div>
+        ) : analysisError ? (
+          <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">
+              No pudimos generar tu análisis
+            </h2>
+            <p className="mt-3 text-red-600">{analysisError}</p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/quiz"
+                className="inline-flex rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700"
+              >
+                Volver al cuestionario
+              </Link>
+
+              <Link
+                href="/pricing"
+                className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Ver planes
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {showHealthBlocks && analysis ? (
+          <>
+            <div className="mt-8">
+              <ResultHero
+                plan={analysis.plan}
+                healthScore={analysis.scores.healthScore}
+                confidenceLevel={analysis.confidence.confidenceLevel}
+                confidenceExplanation={analysis.confidence.confidenceExplanation}
+                executiveSummary={analysis.summaries.executiveSummary}
+                clinicalStyleSummary={analysis.summaries.clinicalStyleSummary}
+                upgradeMessage={analysis.upgradeMessage}
+                advancedAI={analysis.advancedAI}
+              />
+            </div>
+
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-1">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Health Score
+                </h2>
+
+                <div className="mt-4 text-5xl font-bold text-slate-900">
+                  {analysis.scores.healthScore}
+                  <span className="text-xl text-slate-500">/100</span>
+                </div>
+
+                <p className="mt-3 text-sm font-semibold text-slate-900">
+                  {resultTone}
+                </p>
+
+                <p className="mt-2 text-sm text-slate-600">
+                  Estimación orientativa basada en tu perfil actual.
+                </p>
+
+                <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Confidence level
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {translateConfidenceLabel(
+                      analysis.confidence.confidenceLevel
+                    )}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {analysis.confidence.confidenceExplanation}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white p-6 shadow-sm md:col-span-2">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Análisis inteligente
+                </h2>
+
                 <p className="mt-3 leading-7 text-slate-700">
-                  {analysis?.summary}
+                  {analysis.summaries.executiveSummary}
                 </p>
 
                 <div className="mt-5 rounded-2xl bg-slate-50 p-4">
@@ -638,7 +1034,7 @@ function ResultsPageContent() {
                   </h3>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {analysis?.factors?.map((factor, index) => (
+                    {analysis.insights.mainDrivers.map((factor, index) => (
                       <span
                         key={index}
                         className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
@@ -668,14 +1064,14 @@ function ResultsPageContent() {
                     <div className="mt-3 grid gap-3">
                       {visibleAdvancedRecommendations.map((item, index) => (
                         <div
-                          key={`${item.title}-${index}`}
+                          key={`${index}-${item}`}
                           className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
                         >
                           <div className="text-sm font-semibold text-emerald-900">
-                            {item.title}
+                            Recomendación {index + 1}
                           </div>
                           <p className="mt-1 text-sm text-emerald-800">
-                            {item.description}
+                            {item}
                           </p>
                         </div>
                       ))}
@@ -733,165 +1129,344 @@ function ResultsPageContent() {
                     </div>
                   </div>
                 )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold text-slate-900">
-            Qué significa este resultado para ti
-          </h2>
-          <p className="mt-3 text-slate-600">
-            El verdadero valor no está solo en ver un score, sino en usar este
-            resultado como referencia para construir hábitos más consistentes y
-            mejorar con continuidad.
-          </p>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <InsightCard
-              title="Claridad"
-              description="Te ayuda a entender mejor tu situación actual."
-            />
-            <InsightCard
-              title="Dirección"
-              description="Te muestra hacia dónde conviene poner atención."
-            />
-            <InsightCard
-              title="Continuidad"
-              description="Gana más valor cuando repites el análisis en el tiempo."
-            />
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <h2 className="text-2xl font-bold text-slate-900">
-            Recomendaciones priorizadas
-          </h2>
-          <p className="mt-2 text-slate-600">
-            {advancedAIEnabled
-              ? "Ordenadas según la prioridad estimada para tu perfil actual."
-              : "Te mostramos una vista inicial. La priorización inteligente completa está disponible en los planes Pro y Premium."}
-          </p>
-        </div>
-
-        <div className="mt-6">
-          {planLoading ? (
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-slate-600">
-                Cargando beneficios de tu plan...
-              </p>
+              </div>
             </div>
-          ) : visibleSmartRecommendations.length > 0 ? (
-            <div className="space-y-4">
-              {visibleSmartRecommendations.map((item, index) => (
-                <div key={index} className="rounded-2xl bg-white p-6 shadow-sm">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-xl font-semibold">{item.name}</h2>
-                        <PriorityBadge value={item.priority} />
-                        <CategoryBadge value={item.category} />
-                        {!advancedAIEnabled && (
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                            Vista previa
-                          </span>
-                        )}
-                      </div>
 
-                      <p className="mt-3 text-slate-600">{item.reason}</p>
+            <div className="mt-8">
+              <ResultSubscoresGrid
+                sleepScore={analysis.scores.sleepScore}
+                stressScore={analysis.scores.stressScore}
+                energyScore={analysis.scores.energyScore}
+                focusScore={analysis.scores.focusScore}
+                metabolicScore={analysis.scores.metabolicScore}
+              />
+            </div>
 
-                      <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                        <strong>Cómo tomarlo:</strong> {item.schedule}
-                      </div>
+            <div className="mt-8">
+              <ResultInsightsPanel
+                scoreNarrative={analysis.summaries.scoreNarrative}
+                strengths={analysis.insights.strengths}
+                mainDrivers={analysis.insights.mainDrivers}
+                priorityActions={analysis.insights.priorityActions}
+                riskSignals={analysis.insights.riskSignals}
+                dominantNeeds={analysis.userNeeds.dominantNeeds}
+                secondaryNeeds={analysis.userNeeds.secondaryNeeds}
+                advancedRecommendations={analysis.advancedRecommendations}
+              />
+            </div>
 
-                      {item.product && (
-                        <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                          <div className="text-sm text-slate-500">
-                            Producto sugerido
-                          </div>
-                          <div className="mt-1 font-semibold text-slate-900">
-                            {item.product.productName}
-                          </div>
-                          <div className="mt-1 text-sm text-slate-600">
-                            Marca: {item.product.brand}
-                          </div>
-                          <div className="mt-1 text-sm text-slate-600">
-                            Precio estimado: {item.product.price}
-                          </div>
+            <div className="mt-8">
+              <FollowUpPanel
+                professionalFollowUpAdvice={
+                  analysis.summaries.professionalFollowUpAdvice
+                }
+              />
+            </div>
 
-                          <a
-                            href={item.product.buyUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+            {topProductIngredient ? (
+              <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+                <h2 className="text-2xl font-bold text-slate-900">
+                  Ingrediente principal detectado
+                </h2>
+                <p className="mt-3 text-slate-600">
+                  El sistema priorizó{" "}
+                  <strong>{topProductIngredient.ingredientName}</strong> como
+                  uno de los ingredientes con mayor afinidad para tu perfil actual.
+                </p>
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        Match score {topProductIngredient.matchScore}/100
+                      </span>
+
+                      {topProductIngredient.evidenceLevel ? (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          {topProductIngredient.evidenceLevel === "high"
+                            ? "Evidencia alta"
+                            : topProductIngredient.evidenceLevel === "moderate"
+                            ? "Evidencia moderada"
+                            : "Evidencia limitada"}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {topProductIngredient.whyMatched
+                        .slice(0, 3)
+                        .map((reason, index) => (
+                          <div
+                            key={index}
+                            className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700"
                           >
-                            Ver producto
-                          </a>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-white">
-                      {index + 1}
+                            {reason}
+                          </div>
+                        ))}
                     </div>
                   </div>
-                </div>
-              ))}
 
-              {!advancedAIEnabled && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">
-                        {hiddenSmartRecommendationsCount > 0
-                          ? `Hay ${hiddenSmartRecommendationsCount} recomendaciones más esperando por ti`
-                          : "Tu análisis completo puede ir mucho más allá"}
-                      </h3>
-                      <p className="mt-2 text-slate-600">
-                        Actualiza tu plan para ver priorización completa,
-                        recomendaciones más profundas y una lectura mucho más
-                        accionable.
-                      </p>
-                    </div>
-
-                    <Link
-                      href="/pricing"
-                      className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
-                    >
-                      Acceder al análisis completo
-                    </Link>
-                  </div>
+                  <Link
+                    href="/marketplace"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Ver comparador premium
+                  </Link>
                 </div>
-              )}
+              </div>
+            ) : null}
+
+            <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-2xl font-bold text-slate-900">
+                Qué significa este resultado para ti
+              </h2>
+              <p className="mt-3 text-slate-600">
+                El verdadero valor no está solo en ver un score, sino en usar este
+                resultado como referencia para construir hábitos más consistentes y
+                mejorar con continuidad.
+              </p>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <InsightCard
+                  title="Claridad"
+                  description="Te ayuda a entender mejor tu situación actual."
+                />
+                <InsightCard
+                  title="Dirección"
+                  description="Te muestra hacia dónde conviene poner atención."
+                />
+                <InsightCard
+                  title="Continuidad"
+                  description="Gana más valor cuando repites el análisis en el tiempo."
+                />
+              </div>
             </div>
-          ) : advancedAIEnabled ? (
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">
-                No encontramos recomendaciones
+
+            <div className="mt-8">
+              <h2 className="text-2xl font-bold text-slate-900">
+                Recomendaciones priorizadas
               </h2>
               <p className="mt-2 text-slate-600">
-                Completa correctamente el cuestionario para generar sugerencias.
+                {advancedAIEnabled
+                  ? "Ordenadas según la prioridad estimada para tu perfil actual."
+                  : "Te mostramos una vista inicial. La priorización inteligente completa está disponible en los planes Pro y Premium."}
               </p>
             </div>
-          ) : (
-            <>
-              <PremiumGate
-                title="Recomendaciones avanzadas bloqueadas"
-                description="Tu plan actual incluye el análisis base. Actualiza a VitaSmart Pro o Premium para desbloquear recomendaciones priorizadas, sugerencias más profundas y acceso avanzado al marketplace inteligente."
-                requiredPlan="pro"
-              />
 
-              {plan !== "premium" && (
-                <div className="mt-8">
-                  <UpgradePrompt currentPlan={plan} context="results" />
+            <div className="mt-6">
+              {planLoading ? (
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <p className="text-slate-600">
+                    Cargando beneficios de tu plan...
+                  </p>
                 </div>
+              ) : visibleSmartRecommendations.length > 0 ? (
+                <div className="space-y-4">
+                  {visibleSmartRecommendations.map((item, index) => (
+                    <ProductRecommendationPreviewCard
+                      key={`${item.ingredientSlug}-${index}`}
+                      item={item}
+                      index={index}
+                      isPreview={!advancedAIEnabled}
+                    />
+                  ))}
+
+                  {!advancedAIEnabled && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-900">
+                            {hiddenSmartRecommendationsCount > 0
+                              ? `Hay ${hiddenSmartRecommendationsCount} recomendaciones más esperando por ti`
+                              : "Tu análisis completo puede ir mucho más allá"}
+                          </h3>
+                          <p className="mt-2 text-slate-600">
+                            Actualiza tu plan para ver priorización completa,
+                            recomendaciones más profundas y una lectura mucho más
+                            accionable.
+                          </p>
+                        </div>
+
+                        <Link
+                          href="/pricing"
+                          className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+                        >
+                          Acceder al análisis completo
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-900">
+                          Explorar comparador premium
+                        </h3>
+                        <p className="mt-2 text-slate-600">
+                          Ve al marketplace para comparar opciones Excelente,
+                          Muy buena y Buena por ingrediente, con narrativa,
+                          calidad, restricciones y costo diario estimado.
+                        </p>
+                      </div>
+
+                      <Link
+                        href="/marketplace"
+                        className="rounded-xl border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Ir al marketplace
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ) : advancedAIEnabled ? (
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                  <h2 className="text-xl font-semibold">
+                    No encontramos recomendaciones
+                  </h2>
+                  <p className="mt-2 text-slate-600">
+                    Completa correctamente el cuestionario para generar sugerencias.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <PremiumGate
+                    title="Recomendaciones avanzadas bloqueadas"
+                    description="Tu plan actual incluye el análisis base. Actualiza a VitaSmart Pro o Premium para desbloquear recomendaciones priorizadas, sugerencias más profundas y acceso avanzado al marketplace inteligente."
+                    requiredPlan="pro"
+                  />
+
+                  {plan !== "premium" && (
+                    <div className="mt-8">
+                      <UpgradePrompt currentPlan={plan} context="results" />
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        ) : null}
       </div>
     </main>
+  );
+}
+
+function ProductRecommendationPreviewCard({
+  item,
+  index,
+  isPreview,
+}: {
+  item: TopIngredientRecommendationView;
+  index: number;
+  isPreview: boolean;
+}) {
+  const product =
+    item.options.excellent ?? item.options.veryGood ?? item.options.good;
+
+  return (
+    <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold">{item.ingredientName}</h2>
+            <PriorityBadge value={item.matchScore} />
+            <EvidenceBadge value={item.evidenceLevel} />
+            {!product ? null : <TierBadge value={product.product.budgetTier} />}
+            {isPreview && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                Vista previa
+              </span>
+            )}
+          </div>
+
+          <p className="mt-3 text-slate-600">
+            {item.whyMatched?.[0] ||
+              "Este ingrediente aparece priorizado por su posible ajuste al perfil actual."}
+          </p>
+
+          {product ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[140px_1fr]">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                {product.product.imageUrl ? (
+                  <img
+                    src={product.product.imageUrl}
+                    alt={product.product.productName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-32 items-center justify-center text-xs text-slate-400">
+                    Sin imagen
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <div className="text-sm text-slate-500">
+                    Producto sugerido
+                  </div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    {product.product.productName}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Marca: {product.product.brand}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Fabricante: {product.product.manufacturer}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Precio estimado: {product.product.priceLabel}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Costo diario estimado:{" "}
+                    {product.product.estimatedCostPerDayUsd != null
+                      ? `$${product.product.estimatedCostPerDayUsd.toFixed(2)}`
+                      : "N/A"}
+                  </div>
+
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                    <strong>Por qué para ti:</strong>{" "}
+                    {product.narratives.whyForUser}
+                  </div>
+
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                    <strong>Cómo tomarlo:</strong>{" "}
+                    {product.narratives.howToTake}
+                  </div>
+
+                  {product.product.buyUrl && product.product.buyUrl !== "#" && (
+                    <a
+                      href={product.product.buyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                    >
+                      Ver producto
+                    </a>
+                  )}
+
+                  <Link
+                    href="/marketplace"
+                    className="mt-3 ml-3 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Ver comparador completo
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              Aún no hay un producto comercial enlazado a este ingrediente en la
+              vista actual.
+            </div>
+          )}
+        </div>
+
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-bold text-white">
+          {index + 1}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -919,20 +1494,20 @@ function InsightCard({
   );
 }
 
-function PriorityBadge({ value }: { value: string }) {
+function PriorityBadge({ value }: { value: number }) {
   const styles =
-    value === "high"
+    value >= 80
       ? "bg-red-100 text-red-700"
-      : value === "medium"
+      : value >= 60
       ? "bg-amber-100 text-amber-700"
       : "bg-slate-100 text-slate-700";
 
   const label =
-    value === "high"
+    value >= 80
       ? "Prioridad alta"
-      : value === "medium"
+      : value >= 60
       ? "Prioridad media"
-      : "Prioridad baja";
+      : "Prioridad base";
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>
@@ -941,18 +1516,41 @@ function PriorityBadge({ value }: { value: string }) {
   );
 }
 
-function CategoryBadge({ value }: { value: string }) {
-  const labels: Record<string, string> = {
-    energy: "Energía",
-    stress: "Estrés",
-    sleep: "Sueño",
-    focus: "Enfoque",
-    general: "Salud general",
+function EvidenceBadge({
+  value,
+}: {
+  value?: "high" | "moderate" | "limited";
+}) {
+  const map = {
+    high: "Evidencia alta",
+    moderate: "Evidencia moderada",
+    limited: "Evidencia limitada",
   };
+
+  if (!value) return null;
 
   return (
     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-      {labels[value] || value}
+      {map[value]}
+    </span>
+  );
+}
+
+function TierBadge({
+  value,
+}: {
+  value: "excellent" | "very_good" | "good";
+}) {
+  const label =
+    value === "excellent"
+      ? "Excelente"
+      : value === "very_good"
+      ? "Muy buena"
+      : "Buena";
+
+  return (
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+      {label}
     </span>
   );
 }
@@ -963,25 +1561,50 @@ function translateSex(value: string) {
   return "-";
 }
 
-function translateStress(value: string) {
-  if (value === "low") return "Bajo";
-  if (value === "medium") return "Medio";
-  if (value === "high") return "Alto";
-  return "-";
+function translateStressLevel(value?: number) {
+  if (!value) return "-";
+  if (value <= 2) return "Bajo";
+  if (value === 3) return "Medio";
+  return "Alto";
 }
 
-function translateSleep(value: string) {
-  if (value === "5") return "Menos de 5 horas";
-  if (value === "6") return "6 horas";
-  if (value === "7") return "7 horas";
-  if (value === "8") return "8 o más horas";
-  return "-";
+function translateSleepHours(value?: number) {
+  if (value == null) return "-";
+  if (value < 5) return "Menos de 5 horas";
+  if (value < 6.5) return "Alrededor de 6 horas";
+  if (value < 7.5) return "Alrededor de 7 horas";
+  return "8 o más horas";
+}
+
+function translateFiveLevel(value?: number) {
+  if (!value) return "-";
+  if (value === 1) return "Muy bajo";
+  if (value === 2) return "Bajo";
+  if (value === 3) return "Medio";
+  if (value === 4) return "Bueno";
+  return "Muy bueno";
 }
 
 function translateGoal(value: string) {
   if (value === "energy") return "Más energía";
   if (value === "focus") return "Mejor concentración";
   if (value === "sleep") return "Dormir mejor";
-  if (value === "health") return "Salud general";
+  if (value === "general_health") return "Salud general";
+  if (value === "weight") return "Peso / soporte metabólico";
+  if (value === "recovery") return "Recuperación";
   return "-";
+}
+
+function translateConfidenceLabel(value: ConfidenceLevel) {
+  if (value === "high") return "Alta confianza";
+  if (value === "moderate") return "Confianza media";
+  return "Confianza limitada";
+}
+
+function humanizeNeed(value: string) {
+  return value
+    .replace(/Need$/i, "")
+    .replace(/([A-Z])/g, " $1")
+    .replaceAll("_", " ")
+    .trim();
 }

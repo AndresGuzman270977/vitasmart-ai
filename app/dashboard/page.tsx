@@ -3,58 +3,62 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { getCurrentUserProfile } from "../lib/profile";
+import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import {
   getPlanLabel,
-  getPlanLimits,
-  getUpgradeTargetLabel,
   normalizePlan,
-  type UserPlan,
+  type PlanType,
 } from "../lib/planLimits";
-import UpgradePrompt from "../../components/UpgradePrompt";
-import HealthChart from "../../components/HealthChart";
 
-type HealthAssessment = {
+type DashboardAssessmentRow = {
   id: number;
-  created_at: string;
-  age: string;
-  sex: string;
-  stress: string;
-  sleep: string;
-  goal: string;
+  created_at?: string | null;
+
+  assessment_version?: string | null;
+  plan?: string | null;
+  ai_mode?: string | null;
+  generated_by?: string | null;
+
+  age?: number | string | null;
+  sex?: string | null;
+  main_goal?: string | null;
+
+  health_score?: number | null;
+  sleep_score?: number | null;
+  stress_score?: number | null;
+  energy_score?: number | null;
+  focus_score?: number | null;
+  metabolic_score?: number | null;
+
+  confidence_level?: "high" | "moderate" | "limited" | string | null;
+  confidence_explanation?: string | null;
+
+  executive_summary?: string | null;
+  clinical_style_summary?: string | null;
+  score_narrative?: string | null;
+  professional_followup_advice?: string | null;
+
+  strengths?: string[] | null;
+  main_drivers?: string[] | null;
+  priority_actions?: string[] | null;
+  risk_signals?: string[] | null;
+  factors?: string[] | null;
+
+  score?: number | null;
+  summary?: string | null;
+};
+
+type TrendPoint = {
+  id: number;
+  dateLabel: string;
   score: number;
-  summary: string;
-  factors: string[];
-  user_id?: string | null;
-};
-
-type DashboardUser = {
-  id: string;
-  email?: string;
-};
-
-type ChartItem = {
-  date: string;
-  score: number;
-};
-
-type DashboardProfile = {
-  plan?: UserPlan | string | null;
-  subscription_status?: string | null;
-  cancel_at_period_end?: boolean | null;
 };
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<DashboardUser | null>(null);
-  const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
-    null
-  );
-  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
-  const [items, setItems] = useState<HealthAssessment[]>([]);
+  const [plan, setPlan] = useState<PlanType>("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [needsLogin, setNeedsLogin] = useState(false);
+  const [items, setItems] = useState<DashboardAssessmentRow[]>([]);
 
   useEffect(() => {
     let ignore = false;
@@ -64,75 +68,85 @@ export default function DashboardPage() {
         if (!ignore) {
           setLoading(true);
           setError("");
-          setNeedsLogin(false);
+        }
+
+        let resolvedPlan: PlanType = "free";
+
+        try {
+          await ensureUserProfile();
+          const profile = await getCurrentUserProfile();
+          resolvedPlan = normalizePlan(profile?.plan);
+        } catch (err) {
+          console.error("Unable to resolve dashboard plan:", err);
+        }
+
+        if (!ignore) {
+          setPlan(resolvedPlan);
         }
 
         const {
-          data: { user: currentUser },
+          data: { user },
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError) {
-          throw userError;
-        }
+        if (userError) throw userError;
 
-        if (!currentUser) {
+        if (!user) {
           if (!ignore) {
-            setNeedsLogin(true);
             setItems([]);
-            setUser(null);
-            setUserPlan(null);
-            setSubscriptionStatus(null);
-            setCancelAtPeriodEnd(false);
           }
           return;
         }
 
-        if (!ignore) {
-          setUser({
-            id: currentUser.id,
-            email: currentUser.email,
-          });
-        }
-
-        try {
-          const profile =
-            (await getCurrentUserProfile()) as DashboardProfile | null;
-
-          if (!ignore) {
-            setUserPlan(normalizePlan(profile?.plan));
-            setSubscriptionStatus(profile?.subscription_status ?? null);
-            setCancelAtPeriodEnd(Boolean(profile?.cancel_at_period_end));
-          }
-        } catch (profileError) {
-          console.error("Dashboard profile error:", profileError);
-
-          if (!ignore) {
-            setUserPlan("free");
-            setSubscriptionStatus(null);
-            setCancelAtPeriodEnd(false);
-          }
-        }
-
-        const { data: assessments, error: assessmentsError } = await supabase
+        const { data, error: queryError } = await supabase
           .from("health_assessments")
-          .select("*")
-          .eq("user_id", currentUser.id)
+          .select(
+            `
+            id,
+            created_at,
+            assessment_version,
+            plan,
+            ai_mode,
+            generated_by,
+            age,
+            sex,
+            main_goal,
+            health_score,
+            sleep_score,
+            stress_score,
+            energy_score,
+            focus_score,
+            metabolic_score,
+            confidence_level,
+            confidence_explanation,
+            executive_summary,
+            clinical_style_summary,
+            score_narrative,
+            professional_followup_advice,
+            strengths,
+            main_drivers,
+            priority_actions,
+            risk_signals,
+            factors,
+            score,
+            summary
+          `
+          )
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(50);
+          .limit(12);
 
-        if (assessmentsError) {
-          throw assessmentsError;
-        }
+        if (queryError) throw queryError;
 
         if (!ignore) {
-          setItems((assessments || []) as HealthAssessment[]);
+          setItems((data || []) as DashboardAssessmentRow[]);
         }
       } catch (err: any) {
-        console.error("Dashboard error:", err);
+        console.error("Dashboard load error:", err);
 
         if (!ignore) {
           setError(err?.message || "No se pudo cargar el dashboard.");
+          setItems([]);
         }
       } finally {
         if (!ignore) {
@@ -143,565 +157,502 @@ export default function DashboardPage() {
 
     loadDashboard();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      if (ignore) return;
-      setTimeout(() => {
-        if (!ignore) {
-          loadDashboard();
-        }
-      }, 0);
-    });
-
     return () => {
       ignore = true;
-      subscription.unsubscribe();
     };
   }, []);
 
-  const latest = items[0] ?? null;
-  const previous = items[1] ?? null;
+  const latest = items[0] || null;
+  const previous = items[1] || null;
 
-  const scoreDelta = latest && previous ? latest.score - previous.score : null;
+  const latestScore = latest ? resolveHealthScore(latest) : 0;
+  const previousScore = previous ? resolveHealthScore(previous) : 0;
+  const latestConfidence = normalizeConfidence(latest?.confidence_level);
 
-  const latestFactors = useMemo(() => {
-    if (!latest?.factors || !Array.isArray(latest.factors)) return [];
-    return latest.factors.slice(0, 4);
+  const latestSummary = useMemo(() => {
+    if (!latest) return "";
+    return (
+      latest.executive_summary?.trim() ||
+      latest.summary?.trim() ||
+      "Todavía no hay una narrativa ejecutiva disponible."
+    );
   }, [latest]);
 
-  const firstName = useMemo(() => {
-    if (!user?.email) return "usuario";
-    return user.email.split("@")[0];
-  }, [user]);
+  const latestClinicalSummary = useMemo(() => {
+    if (!latest) return "";
+    return latest.clinical_style_summary?.trim() || "";
+  }, [latest]);
 
-  const averageScore = useMemo(() => {
-    if (items.length === 0) return null;
-    const total = items.reduce((acc, item) => acc + Number(item.score || 0), 0);
-    return Math.round(total / items.length);
-  }, [items]);
+  const latestNarrative = useMemo(() => {
+    if (!latest) return "";
+    return (
+      latest.score_narrative?.trim() ||
+      "No se registró narrativa estructurada del score."
+    );
+  }, [latest]);
 
-  const bestScore = useMemo(() => {
-    if (items.length === 0) return null;
-    return Math.max(...items.map((item) => Number(item.score || 0)));
-  }, [items]);
+  const latestFollowUp = useMemo(() => {
+    if (!latest) return "";
+    return (
+      latest.professional_followup_advice?.trim() ||
+      "No se registró consejo de seguimiento."
+    );
+  }, [latest]);
 
-  const chartData: ChartItem[] = useMemo(() => {
-    return [...items]
+  const trend = useMemo<TrendPoint[]>(() => {
+    return items
       .slice()
       .reverse()
       .map((item) => ({
-        score: Number(item.score || 0),
-        date: formatChartDate(item.created_at),
-      }));
+        id: item.id,
+        dateLabel: formatShortDate(item.created_at),
+        score: resolveHealthScore(item),
+      }))
+      .filter((item) => item.score > 0);
   }, [items]);
 
-  const planLimitText = useMemo(() => {
-    if (!userPlan) return "-";
-    const limits = getPlanLimits(userPlan);
-    return Number.isFinite(limits.historyLimit)
-      ? `${limits.historyLimit}`
-      : "Ilimitado";
-  }, [userPlan]);
+  const stats = useMemo(() => {
+    const validScores = items
+      .map((item) => resolveHealthScore(item))
+      .filter((value) => value > 0);
 
-  const subscriptionStatusLabel = useMemo(() => {
-    if (!subscriptionStatus) return "Sin suscripción activa";
+    const average =
+      validScores.length > 0
+        ? Math.round(
+            validScores.reduce((acc, value) => acc + value, 0) /
+              validScores.length
+          )
+        : 0;
 
-    if (subscriptionStatus === "active") {
-      return cancelAtPeriodEnd
-        ? "Activa · cancelación programada"
-        : "Activa";
-    }
+    const best = validScores.length > 0 ? Math.max(...validScores) : 0;
 
-    if (subscriptionStatus === "trialing") return "En prueba";
-    if (subscriptionStatus === "past_due") return "Pago pendiente";
-    if (subscriptionStatus === "payment_failed") return "Pago fallido";
-    if (subscriptionStatus === "canceled") return "Cancelada";
-    if (subscriptionStatus === "checkout_completed") {
-      return "Procesando activación";
-    }
+    const latestVsPrevious =
+      items.length >= 2
+        ? resolveHealthScore(items[0]) - resolveHealthScore(items[1])
+        : 0;
 
-    return subscriptionStatus;
-  }, [subscriptionStatus, cancelAtPeriodEnd]);
+    const positiveCount = validScores.filter((value) => value >= 80).length;
 
-  const advancedAIEnabled = useMemo(() => {
-    if (!userPlan) return false;
-    return getPlanLimits(userPlan).advancedAI;
-  }, [userPlan]);
+    return {
+      total: items.length,
+      average,
+      best,
+      latestVsPrevious,
+      positiveCount,
+    };
+  }, [items]);
 
-  const marketplaceModeLabel = useMemo(() => {
-    if (!userPlan) return "-";
-    const mode = getPlanLimits(userPlan).marketplaceMode;
-    if (mode === "premium") return "Premium";
-    if (mode === "smart") return "Inteligente";
-    return "General";
-  }, [userPlan]);
+  const mainDrivers = sanitizeStringArray(
+    latest?.main_drivers || latest?.factors || []
+  );
+  const priorityActions = sanitizeStringArray(latest?.priority_actions || []);
+  const strengths = sanitizeStringArray(latest?.strengths || []);
+  const riskSignals = sanitizeStringArray(latest?.risk_signals || []);
 
-  const currentMomentum = useMemo(() => {
-    if (!latest) return "Sin datos todavía";
-    if (scoreDelta === null) return "Estás construyendo tu línea base";
-    if (scoreDelta > 0) return "Vas mejorando";
-    if (scoreDelta < 0) return "Tu score bajó recientemente";
-    return "Te estás manteniendo estable";
-  }, [latest, scoreDelta]);
-
-  const progressNarrative = useMemo(() => {
-    if (!latest) {
-      return "Tu dashboard empezará a tomar más valor en cuanto generes tus primeros análisis.";
-    }
-
-    if (items.length === 1) {
-      return "Ya tienes un punto de partida. Lo siguiente es repetir tu análisis para detectar evolución real.";
-    }
-
-    if (scoreDelta !== null && scoreDelta > 0) {
-      return "Tu evolución reciente muestra una señal positiva. Mantener continuidad puede ayudarte a consolidar esa mejora.";
-    }
-
-    if (scoreDelta !== null && scoreDelta < 0) {
-      return "Tu score reciente bajó frente al análisis anterior. Repetir el análisis y revisar tus factores puede ayudarte a recuperar dirección.";
-    }
-
-    return "Tu evolución se ve estable. El siguiente paso es sumar más contexto para detectar tendencias con más claridad.";
-  }, [latest, items.length, scoreDelta]);
-
-  const nextRecommendedPlan = useMemo(() => {
-    if (!userPlan || userPlan === "premium") return null;
-    return getUpgradeTargetLabel(userPlan);
-  }, [userPlan]);
-
-  const scoreToBest = useMemo(() => {
-    if (!latest || bestScore === null) return null;
-    return Math.max(bestScore - latest.score, 0);
-  }, [latest, bestScore]);
-
-  const dashboardNarrative = useMemo(() => {
-    if (!userPlan) {
-      return "Este panel está pensado para darte claridad y ayudarte a convertir cada análisis en una herramienta de seguimiento real.";
-    }
-
-    if (userPlan === "free") {
-      return "Estás viendo una versión útil del dashboard. Pro y Premium lo convierten en una herramienta mucho más profunda y accionable.";
-    }
-
-    if (userPlan === "pro") {
-      return "Ya tienes una base sólida. Premium es el siguiente salto si quieres máxima continuidad y una experiencia más refinada.";
-    }
-
-    return "Ya estás en la versión más completa del dashboard, con la capa más profunda disponible dentro del ecosistema VitaSmart AI.";
-  }, [userPlan]);
+  const latestPlan = normalizePlan(latest?.plan);
+  const latestAiMode = normalizeAiMode(latest?.ai_mode);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+            VitaSmart AI · Dashboard
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-full bg-slate-900 px-4 py-1 text-sm font-semibold text-white">
+              Plan actual: {getPlanLabel(plan)}
+            </div>
+
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+              Evaluaciones: {stats.total}
+            </div>
+
+            {latest ? (
+              <>
+                <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+                  Última IA: {latestAiMode === "advanced" ? "Avanzada" : "Base"}
+                </div>
+
+                <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+                  Último plan usado: {getPlanLabel(latestPlan)}
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900">
+            Panel principal de salud preventiva
+          </h1>
+
+          <p className="mt-4 max-w-4xl text-lg leading-8 text-slate-600">
+            Este panel organiza tu estado más reciente, la narrativa dominante
+            del último análisis y una vista rápida de evolución para ayudarte a
+            actuar con más claridad, continuidad y mejor criterio preventivo.
+          </p>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-5">
+            <StatCard
+              title="Último score"
+              value={latest ? String(latestScore) : "-"}
+              subtitle="Health Score más reciente"
+            />
+            <StatCard
+              title="Promedio"
+              value={stats.average ? String(stats.average) : "-"}
+              subtitle="Promedio de evaluaciones guardadas"
+            />
+            <StatCard
+              title="Mejor score"
+              value={stats.best ? String(stats.best) : "-"}
+              subtitle="Mejor resultado histórico"
+            />
+            <StatCard
+              title="Último cambio"
+              value={
+                stats.total >= 2
+                  ? stats.latestVsPrevious > 0
+                    ? `+${stats.latestVsPrevious}`
+                    : `${stats.latestVsPrevious}`
+                  : "-"
+              }
+              subtitle="Comparado con la evaluación anterior"
+            />
+            <StatCard
+              title="Scores altos"
+              value={String(stats.positiveCount)}
+              subtitle="Resultados ≥ 80"
+            />
+          </div>
+        </section>
+
         {loading ? (
-          <div className="rounded-2xl bg-white p-8 shadow-sm">
-            <h1 className="text-3xl font-bold text-slate-900">
-              Cargando dashboard...
-            </h1>
-            <p className="mt-3 text-slate-600">
-              Estamos preparando tu panel de salud.
-            </p>
-          </div>
+          <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <p className="text-slate-600">Cargando dashboard...</p>
+          </section>
         ) : error ? (
-          <div className="rounded-2xl bg-white p-8 shadow-sm">
-            <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-            <p className="mt-4 text-red-600">{error}</p>
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/login"
-                className="rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white hover:bg-slate-700"
-              >
-                Ir a login
-              </Link>
-
-              <Link
-                href="/"
-                className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Volver al inicio
-              </Link>
-            </div>
-          </div>
-        ) : needsLogin ? (
-          <div className="rounded-2xl bg-white p-8 shadow-sm">
-            <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
-              VitaSmart AI · Dashboard
-            </div>
-
-            <h1 className="text-3xl font-bold text-slate-900">
-              Debes iniciar sesión
-            </h1>
-
-            <p className="mt-3 text-slate-600">
-              Inicia sesión para acceder a tu panel personal de salud y ver tu
-              evolución.
+          <section className="mt-8 rounded-3xl border border-red-200 bg-red-50 p-8 shadow-sm">
+            <h2 className="text-xl font-semibold text-red-900">
+              No se pudo cargar el dashboard
+            </h2>
+            <p className="mt-3 text-red-700">{error}</p>
+          </section>
+        ) : !latest ? (
+          <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+              Todavía no tienes un análisis reciente
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+              Cuando completes tu primera evaluación, aquí verás tu score, tus
+              prioridades dominantes, tu resumen ejecutivo, la lectura
+              clínico-preventiva y la evolución de tus resultados a lo largo del
+              tiempo.
             </p>
 
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-6 flex flex-wrap gap-3">
               <Link
-                href="/login"
-                className="rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white hover:bg-slate-700"
+                href="/quiz"
+                className="inline-flex rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700"
               >
-                Ir a login
+                Hacer análisis
               </Link>
 
               <Link
-                href="/"
-                className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
+                href="/pricing"
+                className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                Volver al inicio
+                Ver planes
               </Link>
             </div>
-          </div>
+          </section>
         ) : (
           <>
-            <section className="rounded-2xl bg-white p-8 shadow-sm">
-              <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
-                VitaSmart AI · Dashboard
-              </div>
-
-              <h1 className="text-3xl font-bold text-slate-900">
-                Hola, {firstName}
-              </h1>
-
-              <p className="mt-3 max-w-3xl text-slate-600">
-                Este es tu panel principal de salud preventiva. Aquí puedes ver
-                tu estado actual, tu evolución reciente y las señales que más
-                conviene seguir de cerca.
-              </p>
-
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-sm font-semibold text-slate-900">
-                  Lectura rápida de tu experiencia actual
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {dashboardNarrative}
-                </p>
-              </div>
-
-              <div className="mt-6 flex flex-wrap items-center gap-3">
-                {userPlan && (
-                  <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-                    Plan actual: {getPlanLabel(userPlan)}
-                  </span>
-                )}
-
-                {userPlan && (
-                  <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-                    Estado: {subscriptionStatusLabel}
-                  </span>
-                )}
-
-                {userPlan && (
-                  <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-                    Límite de análisis: {planLimitText}
-                  </span>
-                )}
-              </div>
-
-              {latest && (
-                <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-5">
-                  <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
-                    Estado actual
-                  </div>
-                  <p className="mt-2 text-lg font-semibold text-slate-900">
-                    {currentMomentum}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">
-                    {progressNarrative}
-                  </p>
-
-                  {scoreToBest !== null && bestScore !== null && latest && (
-                    <div className="mt-4 text-sm text-slate-700">
-                      {scoreToBest === 0 ? (
-                        <span>
-                          Estás en tu mejor score registrado hasta ahora:{" "}
-                          <strong>{bestScore}/100</strong>.
-                        </span>
-                      ) : (
-                        <span>
-                          Estás a <strong>{scoreToBest}</strong> punto
-                          {scoreToBest === 1 ? "" : "s"} de tu mejor score
-                          registrado: <strong>{bestScore}/100</strong>.
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {userPlan === "free" && (
-                <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
-                  <div className="text-sm font-semibold text-sky-900">
-                    Desbloquea más con Pro o Premium
-                  </div>
-                  <p className="mt-2 text-sm text-sky-800">
-                    Tu plan Free incluye historial limitado, análisis base y
-                    marketplace general. Actualiza para desbloquear IA avanzada,
-                    recomendaciones priorizadas y un marketplace inteligente.
-                  </p>
-
-                  <div className="mt-4">
-                    <Link
-                      href="/pricing"
-                      className="inline-flex rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-700"
-                    >
-                      Ver planes
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {cancelAtPeriodEnd && (
-                <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                  <div className="text-sm font-semibold text-amber-900">
-                    Tu suscripción sigue activa, pero tiene cancelación programada
-                  </div>
-                  <p className="mt-2 text-sm text-amber-800">
-                    Puedes reactivarla desde la página de Pricing antes de que
-                    termine el período actual.
-                  </p>
-
-                  <div className="mt-4">
-                    <Link
-                      href="/pricing"
-                      className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 font-semibold text-amber-900 transition hover:bg-amber-100"
-                    >
-                      Gestionar suscripción
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {nextRecommendedPlan && (
-                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Próximo salto recomendado
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Tu siguiente mejora natural es{" "}
-                    <strong>{nextRecommendedPlan}</strong>. Es la forma más
-                    directa de convertir este dashboard en una herramienta más
-                    profunda, más útil y más accionable.
-                  </p>
-                </div>
-              )}
-
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/quiz"
-                  className="rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white hover:bg-slate-700"
-                >
-                  Nuevo análisis
-                </Link>
-
-                <Link
-                  href="/history"
-                  className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Ver historial
-                </Link>
-
-                <Link
-                  href="/pricing"
-                  className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Gestionar plan
-                </Link>
-              </div>
-            </section>
-
-            <section className="mt-8 grid gap-6 md:grid-cols-5">
-              <MetricCard
-                title="Health Score actual"
-                value={latest ? `${latest.score}/100` : "-"}
-                subtitle={latest ? "Último análisis guardado" : "Sin datos aún"}
-              />
-
-              <MetricCard
-                title="Cambio reciente"
-                value={
-                  scoreDelta === null
-                    ? "-"
-                    : scoreDelta > 0
-                    ? `+${scoreDelta}`
-                    : `${scoreDelta}`
-                }
-                subtitle="Comparado con el análisis anterior"
-              />
-
-              <MetricCard
-                title="Promedio histórico"
-                value={averageScore !== null ? `${averageScore}` : "-"}
-                subtitle="Promedio de todos tus análisis"
-              />
-
-              <MetricCard
-                title="Total análisis"
-                value={`${items.length}`}
-                subtitle="Análisis registrados en tu cuenta"
-              />
-
-              <MetricCard
-                title="Mejor score"
-                value={bestScore !== null ? `${bestScore}/100` : "-"}
-                subtitle="Tu punto más alto registrado"
-              />
-            </section>
-
-            <section className="mt-8 grid gap-6 md:grid-cols-3">
-              <MetricCard
-                title="IA avanzada"
-                value={advancedAIEnabled ? "Sí" : "No"}
-                subtitle="Disponibilidad según tu plan"
-              />
-
-              <MetricCard
-                title="Marketplace"
-                value={marketplaceModeLabel}
-                subtitle="Modo activo del catálogo"
-              />
-
-              <MetricCard
-                title="Suscripción"
-                value={subscriptionStatusLabel}
-                subtitle="Estado actual de facturación"
-              />
-            </section>
-
-            <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    Evolución del Health Score
-                  </h2>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Ver tu curva en el tiempo te ayuda a detectar si estás
-                    mejorando, estancado o perdiendo consistencia.
-                  </p>
+            <section className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge>{formatDate(latest.created_at)}</Badge>
+                  <Badge>{getPlanLabel(latestPlan)}</Badge>
+                  <Badge>
+                    {latestAiMode === "advanced" ? "IA avanzada" : "IA base"}
+                  </Badge>
+                  <ConfidencePill level={latestConfidence} />
+                  {latest.assessment_version ? (
+                    <Badge>{latest.assessment_version}</Badge>
+                  ) : null}
                 </div>
 
-                <Link
-                  href="/quiz"
-                  className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Repetir análisis
-                </Link>
-              </div>
-
-              {chartData.length > 0 ? (
-                <div className="mt-6">
-                  <HealthChart data={chartData} />
-                </div>
-              ) : (
-                <p className="mt-4 text-slate-600">
-                  Aún no hay suficientes análisis para mostrar la gráfica.
-                </p>
-              )}
-            </section>
-
-            <section className="mt-8 grid gap-6 lg:grid-cols-3">
-              <div className="rounded-2xl bg-white p-6 shadow-sm lg:col-span-2">
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Resumen del último análisis
-                </h2>
-
-                {latest ? (
-                  <>
-                    <div className="mt-4 text-sm text-slate-500">
-                      {formatDate(latest.created_at)}
-                    </div>
-
-                    <p className="mt-4 leading-7 text-slate-700">
-                      {latest.summary}
+                <div className="mt-6 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h2 className="text-3xl font-semibold tracking-tight text-slate-900">
+                      Health Score {latestScore}/100
+                    </h2>
+                    <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700">
+                      {latestSummary}
                     </p>
+                  </div>
 
-                    <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                      <InfoRow label="Edad" value={latest.age} />
-                      <InfoRow label="Sexo" value={translateSex(latest.sex)} />
-                      <InfoRow
-                        label="Estrés"
-                        value={translateStress(latest.stress)}
-                      />
-                      <InfoRow
-                        label="Sueño"
-                        value={translateSleep(latest.sleep)}
-                      />
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 px-6 py-5 text-center">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Confianza
                     </div>
-                  </>
-                ) : (
-                  <p className="mt-4 text-slate-600">
-                    Aún no tienes análisis suficientes para mostrar un resumen.
-                  </p>
-                )}
+                    <div className="mt-2 text-2xl font-bold text-slate-900">
+                      {translateConfidence(latestConfidence)}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      {latest.confidence_explanation?.trim()
+                        ? "Explicación disponible"
+                        : "Explicación no registrada"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                  <MiniScoreCard label="Sleep" value={latest.sleep_score} />
+                  <MiniScoreCard label="Stress" value={latest.stress_score} />
+                  <MiniScoreCard label="Energy" value={latest.energy_score} />
+                  <MiniScoreCard label="Focus" value={latest.focus_score} />
+                  <MiniScoreCard
+                    label="Metabolic"
+                    value={latest.metabolic_score}
+                  />
+                </div>
               </div>
 
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Factores principales
-                </h2>
+              <div className="space-y-6">
+                <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                    Acciones rápidas
+                  </h2>
 
-                {latestFactors.length > 0 ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {latestFactors.map((factor, index) => (
-                      <span
-                        key={index}
-                        className="rounded-full bg-slate-100 px-3 py-2 text-sm text-slate-700"
-                      >
-                        {factor}
-                      </span>
-                    ))}
+                  <div className="mt-6 grid gap-3">
+                    <QuickLink
+                      href="/quiz"
+                      title="Hacer nuevo análisis"
+                      description="Genera un nuevo resultado preventivo estructurado."
+                      primary
+                    />
+                    <QuickLink
+                      href="/results"
+                      title="Ver resultados"
+                      description="Revisar la última lectura completa."
+                    />
+                    <QuickLink
+                      href="/marketplace"
+                      title="Abrir marketplace"
+                      description="Comparar suplementos según tu perfil."
+                    />
+                    <QuickLink
+                      href="/history"
+                      title="Ver historial"
+                      description="Revisar evaluaciones previas guardadas."
+                    />
                   </div>
-                ) : (
-                  <p className="mt-4 text-slate-600">
-                    Todavía no hay factores disponibles.
-                  </p>
-                )}
+                </div>
 
-                <div className="mt-8 rounded-xl bg-slate-50 p-4">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Próximo paso sugerido
+                <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                    Perfil rápido del último análisis
+                  </h2>
+
+                  <div className="mt-5 space-y-3">
+                    <QuickRow
+                      label="Objetivo"
+                      value={translateGoal(latest.main_goal)}
+                    />
+                    <QuickRow
+                      label="Sexo"
+                      value={translateSex(latest.sex)}
+                    />
+                    <QuickRow
+                      label="Edad"
+                      value={
+                        latest.age != null && latest.age !== ""
+                          ? String(latest.age)
+                          : "-"
+                      }
+                    />
+                    <QuickRow
+                      label="Fecha"
+                      value={formatDate(latest.created_at)}
+                    />
+                    <QuickRow
+                      label="Plan usado"
+                      value={getPlanLabel(latestPlan)}
+                    />
+                    <QuickRow
+                      label="Modo IA"
+                      value={latestAiMode === "advanced" ? "Avanzada" : "Base"}
+                    />
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {latest
-                      ? "Repite tu análisis en los próximos días para detectar si tus señales mejoran, se mantienen o empeoran."
-                      : "Empieza con tu primer análisis para construir una línea base y comenzar a medir evolución."}
-                  </p>
                 </div>
               </div>
             </section>
 
-            <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-900">
-                Accesos rápidos
-              </h2>
+            {latestClinicalSummary ? (
+              <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+                  Resumen clínico-preventivo
+                </h2>
+                <p className="mt-4 max-w-5xl text-sm leading-8 text-slate-700">
+                  {latestClinicalSummary}
+                </p>
+              </section>
+            ) : null}
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                <QuickLinkCard
-                  href="/quiz"
-                  title="Nuevo análisis"
-                  description="Genera una nueva evaluación con IA."
-                />
-                <QuickLinkCard
-                  href="/history"
-                  title="Historial completo"
-                  description="Consulta todos tus análisis guardados."
-                />
-                <QuickLinkCard
-                  href="/marketplace"
-                  title="Marketplace"
-                  description="Explora suplementos recomendados para ti."
-                />
-              </div>
+            <section className="mt-8 grid gap-6 xl:grid-cols-3">
+              <ListPanel
+                title="Fortalezas"
+                items={strengths}
+                emptyText="No se registraron fortalezas específicas."
+              />
+
+              <ListPanel
+                title="Factores dominantes"
+                items={mainDrivers}
+                emptyText="No se registraron factores dominantes."
+              />
+
+              <ListPanel
+                title="Prioridades sugeridas"
+                items={priorityActions}
+                emptyText="No se registraron prioridades específicas."
+              />
             </section>
 
-            {userPlan && userPlan !== "premium" && (
-              <section className="mt-8">
-                <UpgradePrompt currentPlan={userPlan} context="dashboard" />
+            <section className="mt-8 grid gap-6 xl:grid-cols-2">
+              <TextPanel title="Narrativa del score" text={latestNarrative} />
+
+              <TextPanel
+                title="Follow-up advice"
+                text={latestFollowUp}
+              />
+            </section>
+
+            <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+                    Evolución reciente
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Vista simple de cómo se han movido tus scores más recientes.
+                  </p>
+                </div>
+
+                <div className="text-sm text-slate-500">
+                  {trend.length} punto(s)
+                </div>
+              </div>
+
+              {trend.length === 0 ? (
+                <p className="mt-6 text-sm text-slate-500">
+                  No hay suficientes datos para mostrar evolución.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-8">
+                    <div className="flex items-end gap-3 overflow-x-auto pb-2">
+                      {trend.map((point) => (
+                        <div
+                          key={point.id}
+                          className="flex min-w-[84px] flex-col items-center"
+                        >
+                          <div className="mb-2 text-xs font-semibold text-slate-500">
+                            {point.score}
+                          </div>
+                          <div className="flex h-52 items-end">
+                            <div
+                              className={`w-12 rounded-t-2xl ${
+                                point.score >= 80
+                                  ? "bg-emerald-500"
+                                  : point.score >= 60
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
+                              }`}
+                              style={{ height: `${Math.max(point.score, 6)}%` }}
+                            />
+                          </div>
+                          <div className="mt-3 text-center text-xs text-slate-500">
+                            {point.dateLabel}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {previous ? (
+                    <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Cambio vs evaluación anterior
+                      </h3>
+                      <p className="mt-3 text-sm leading-7 text-slate-700">
+                        Tu último score fue de <strong>{latestScore}</strong> y
+                        el anterior fue de <strong>{previousScore}</strong>. El
+                        cambio actual es de{" "}
+                        <strong>
+                          {stats.latestVsPrevious > 0
+                            ? `+${stats.latestVsPrevious}`
+                            : stats.latestVsPrevious}
+                        </strong>{" "}
+                        puntos.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </section>
+
+            {riskSignals.length > 0 ? (
+              <section className="mt-8 rounded-3xl border border-amber-200 bg-amber-50 p-8 shadow-sm">
+                <h2 className="text-xl font-semibold tracking-tight text-amber-900">
+                  Risk signals recientes
+                </h2>
+
+                <div className="mt-5 space-y-3">
+                  {riskSignals.map((item, index) => (
+                    <div
+                      key={`${item}-${index}`}
+                      className="rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-amber-900"
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
               </section>
-            )}
+            ) : null}
+
+            <section className="mt-8 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+                    Continuidad del proceso
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                    El valor real del sistema aparece cuando repites el análisis,
+                    observas tendencias y ajustas tus prioridades con más
+                    intención. El dashboard no es solo un resumen: es una guía de
+                    continuidad.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Link
+                    href="/quiz"
+                    className="inline-flex rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-700"
+                  >
+                    Nuevo análisis
+                  </Link>
+
+                  <Link
+                    href="/history"
+                    className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Ver historial completo
+                  </Link>
+                </div>
+              </div>
+            </section>
           </>
         )}
       </div>
@@ -709,7 +660,39 @@ export default function DashboardPage() {
   );
 }
 
-function MetricCard({
+function QuickLink({
+  href,
+  title,
+  description,
+  primary = false,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  primary?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-2xl border p-4 transition ${
+        primary
+          ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
+          : "border-slate-200 bg-slate-50 text-slate-900 hover:bg-white"
+      }`}
+    >
+      <div className="text-base font-semibold">{title}</div>
+      <div
+        className={`mt-2 text-sm leading-6 ${
+          primary ? "text-slate-200" : "text-slate-600"
+        }`}
+      >
+        {description}
+      </div>
+    </Link>
+  );
+}
+
+function StatCard({
   title,
   value,
   subtitle,
@@ -719,45 +702,171 @@ function MetricCard({
   subtitle: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
+    <div className="rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-200">
       <div className="text-sm text-slate-500">{title}</div>
-      <div className="mt-3 text-4xl font-bold text-slate-900">{value}</div>
-      <div className="mt-3 text-sm text-slate-600">{subtitle}</div>
+      <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
+      <div className="mt-2 text-sm text-slate-600">{subtitle}</div>
     </div>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 p-4">
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-1 font-semibold text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function QuickLinkCard({
-  href,
-  title,
-  description,
+function MiniScoreCard({
+  label,
+  value,
 }: {
-  href: string;
+  label: string;
+  value?: number | null;
+}) {
+  const score = typeof value === "number" ? value : null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-slate-600">{label}</span>
+        <span className="text-sm font-semibold text-slate-900">
+          {score ?? "N/A"}
+        </span>
+      </div>
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${
+            score == null
+              ? "bg-slate-200"
+              : score >= 80
+              ? "bg-emerald-500"
+              : score >= 60
+              ? "bg-amber-500"
+              : "bg-rose-500"
+          }`}
+          style={{ width: `${score ?? 0}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ListPanel({
+  title,
+  items,
+  emptyText,
+}: {
   title: string;
-  description: string;
+  items: string[];
+  emptyText: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:bg-slate-100"
-    >
-      <div className="text-lg font-semibold text-slate-900">{title}</div>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-    </Link>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {title}
+      </h3>
+
+      {items.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          {items.map((item, index) => (
+            <div
+              key={`${item}-${index}`}
+              className="rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700"
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm leading-6 text-slate-500">{emptyText}</p>
+      )}
+    </div>
   );
 }
 
-function formatDate(value: string) {
+function TextPanel({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {title}
+      </h3>
+      <p className="mt-4 text-sm leading-7 text-slate-700">{text}</p>
+    </div>
+  );
+}
+
+function QuickRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-medium text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+      {children}
+    </span>
+  );
+}
+
+function ConfidencePill({
+  level,
+}: {
+  level: "high" | "moderate" | "limited";
+}) {
+  const styles =
+    level === "high"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : level === "moderate"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-slate-200 bg-slate-100 text-slate-700";
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${styles}`}
+    >
+      {translateConfidence(level)}
+    </span>
+  );
+}
+
+function resolveHealthScore(item: DashboardAssessmentRow): number {
+  if (typeof item.health_score === "number") return item.health_score;
+  if (typeof item.score === "number") return item.score;
+  return 0;
+}
+
+function normalizeAiMode(value?: string | null): "basic" | "advanced" {
+  return value === "advanced" ? "advanced" : "basic";
+}
+
+function normalizeConfidence(
+  value?: string | null
+): "high" | "moderate" | "limited" {
+  if (value === "high") return "high";
+  if (value === "moderate") return "moderate";
+  return "limited";
+}
+
+function sanitizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Sin fecha";
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
 
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "medium",
@@ -765,8 +874,10 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-function formatChartDate(value: string) {
+function formatShortDate(value?: string | null) {
+  if (!value) return "-";
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
 
   return new Intl.DateTimeFormat("es-CO", {
     month: "short",
@@ -774,23 +885,24 @@ function formatChartDate(value: string) {
   }).format(date);
 }
 
-function translateSex(value: string) {
+function translateConfidence(value: "high" | "moderate" | "limited") {
+  if (value === "high") return "Alta confianza";
+  if (value === "moderate") return "Confianza media";
+  return "Confianza limitada";
+}
+
+function translateGoal(value?: string | null) {
+  if (value === "energy") return "Más energía";
+  if (value === "focus") return "Mejor concentración";
+  if (value === "sleep") return "Dormir mejor";
+  if (value === "general_health") return "Salud general";
+  if (value === "weight") return "Peso / soporte metabólico";
+  if (value === "recovery") return "Recuperación";
+  return "-";
+}
+
+function translateSex(value?: string | null) {
   if (value === "male") return "Hombre";
   if (value === "female") return "Mujer";
-  return value || "-";
-}
-
-function translateStress(value: string) {
-  if (value === "low") return "Bajo";
-  if (value === "medium") return "Medio";
-  if (value === "high") return "Alto";
-  return value || "-";
-}
-
-function translateSleep(value: string) {
-  if (value === "5") return "Menos de 5 horas";
-  if (value === "6") return "6 horas";
-  if (value === "7") return "7 horas";
-  if (value === "8") return "8 o más horas";
-  return value || "-";
+  return "-";
 }

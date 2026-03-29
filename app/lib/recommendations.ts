@@ -24,15 +24,71 @@ export type RecommendationItem = {
 
 type DraftRecommendation = Omit<RecommendationItem, "product">;
 
-export function getRecommendations(data: QuizData): RecommendationItem[] {
-  const recommendations: DraftRecommendation[] = [];
-  const age = Number(data.age || 0);
-  const sex = String(data.sex || "").trim();
-  const stress = String(data.stress || "").trim();
-  const sleep = String(data.sleep || "").trim();
-  const goal = String(data.goal || "").trim();
+type NormalizedQuizData = {
+  age: number;
+  sex: string;
+  stress: string;
+  sleep: string;
+  goal: string;
+};
 
-  if (age >= 40 && sex === "male") {
+/**
+ * LEGACY RECOMMENDATIONS ENGINE
+ *
+ * Este archivo sigue activo como capa de compatibilidad para el flujo anterior.
+ * La nueva arquitectura premium debe apoyarse en:
+ *
+ * - app/lib/healthEngine/*
+ * - app/lib/recommendationEngine/*
+ * - app/lib/catalog/*
+ * - app/api/health-analysis/route.ts
+ *
+ * Mientras la migración completa termina, esta utilidad sigue entregando
+ * recomendaciones básicas coherentes para no romper pantallas o flujos legacy.
+ */
+
+export function getRecommendations(data: QuizData): RecommendationItem[] {
+  const normalized = normalizeQuizData(data);
+  const recommendations: DraftRecommendation[] = [];
+
+  applyAgeSexRules(normalized, recommendations);
+  applyStressRules(normalized, recommendations);
+  applySleepRules(normalized, recommendations);
+  applyGoalRules(normalized, recommendations);
+  applyCrossRules(normalized, recommendations);
+
+  const unique = mergeAndDeduplicateRecommendations(recommendations);
+
+  return unique
+    .map((item) => ({
+      ...item,
+      product: findProductBySupplement(item.name),
+    }))
+    .sort(sortByPriorityThenCategory);
+}
+
+function normalizeQuizData(data: QuizData): NormalizedQuizData {
+  return {
+    age: Number(data.age || 0),
+    sex: String(data.sex || "").trim().toLowerCase(),
+    stress: String(data.stress || "").trim().toLowerCase(),
+    sleep: String(data.sleep || "").trim(),
+    goal: normalizeGoal(String(data.goal || "").trim().toLowerCase()),
+  };
+}
+
+function normalizeGoal(goal: string): string {
+  if (goal === "general_health") return "health";
+  if (goal === "weight") return "health";
+  if (goal === "recovery") return "energy";
+  return goal;
+}
+
+function applyAgeSexRules(
+  data: NormalizedQuizData,
+  recommendations: DraftRecommendation[]
+) {
+  if (data.age >= 40 && data.sex === "male") {
     recommendations.push({
       name: "Multivitamínico para hombre 40+",
       reason:
@@ -43,7 +99,23 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
     });
   }
 
-  if (stress === "high") {
+  if (data.age >= 40 && data.sex === "female") {
+    recommendations.push({
+      name: "Multivitamínico de soporte general",
+      reason:
+        "Puede aportar una base útil de soporte nutricional general en perfiles adultos que buscan continuidad en bienestar.",
+      schedule: "Tomar en la mañana con el desayuno.",
+      category: "general",
+      priority: "medium",
+    });
+  }
+}
+
+function applyStressRules(
+  data: NormalizedQuizData,
+  recommendations: DraftRecommendation[]
+) {
+  if (data.stress === "high") {
     recommendations.push(
       {
         name: "Magnesio glicinato",
@@ -64,7 +136,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
     );
   }
 
-  if (stress === "medium") {
+  if (data.stress === "medium") {
     recommendations.push({
       name: "Magnesio glicinato",
       reason:
@@ -74,8 +146,13 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       priority: "medium",
     });
   }
+}
 
-  if (sleep === "5" || sleep === "6") {
+function applySleepRules(
+  data: NormalizedQuizData,
+  recommendations: DraftRecommendation[]
+) {
+  if (data.sleep === "5" || data.sleep === "6") {
     recommendations.push({
       name: "Magnesio para sueño y recuperación",
       reason:
@@ -85,8 +162,13 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       priority: "high",
     });
   }
+}
 
-  if (goal === "energy") {
+function applyGoalRules(
+  data: NormalizedQuizData,
+  recommendations: DraftRecommendation[]
+) {
+  if (data.goal === "energy") {
     recommendations.push(
       {
         name: "CoQ10",
@@ -106,7 +188,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       }
     );
 
-    if (sleep === "5" || sleep === "6") {
+    if (data.sleep === "5" || data.sleep === "6") {
       recommendations.push({
         name: "Omega-3",
         reason:
@@ -118,7 +200,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
     }
   }
 
-  if (goal === "focus") {
+  if (data.goal === "focus") {
     recommendations.push(
       {
         name: "Omega-3",
@@ -138,7 +220,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       }
     );
 
-    if (stress === "high") {
+    if (data.stress === "high") {
       recommendations.push({
         name: "Ashwagandha",
         reason:
@@ -150,7 +232,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
     }
   }
 
-  if (goal === "sleep") {
+  if (data.goal === "sleep") {
     recommendations.push({
       name: "Magnesio glicinato",
       reason:
@@ -160,7 +242,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       priority: "high",
     });
 
-    if (stress === "high") {
+    if (data.stress === "high") {
       recommendations.push({
         name: "Ashwagandha",
         reason:
@@ -172,7 +254,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
     }
   }
 
-  if (goal === "health") {
+  if (data.goal === "health") {
     recommendations.push(
       {
         name: "Omega-3",
@@ -192,8 +274,13 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       }
     );
   }
+}
 
-  if ((goal === "energy" || goal === "focus") && stress === "high") {
+function applyCrossRules(
+  data: NormalizedQuizData,
+  recommendations: DraftRecommendation[]
+) {
+  if ((data.goal === "energy" || data.goal === "focus") && data.stress === "high") {
     recommendations.push({
       name: "Magnesio glicinato",
       reason:
@@ -204,7 +291,7 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
     });
   }
 
-  if ((goal === "focus" || goal === "health") && sleep === "5") {
+  if ((data.goal === "focus" || data.goal === "health") && data.sleep === "5") {
     recommendations.push({
       name: "Magnesio para sueño y recuperación",
       reason:
@@ -214,15 +301,6 @@ export function getRecommendations(data: QuizData): RecommendationItem[] {
       priority: "high",
     });
   }
-
-  const unique = mergeAndDeduplicateRecommendations(recommendations);
-
-  return unique
-    .map((item) => ({
-      ...item,
-      product: findProductBySupplement(item.name),
-    }))
-    .sort(sortByPriorityThenCategory);
 }
 
 function normalizeKey(value: string) {
@@ -285,4 +363,18 @@ function sortByPriorityThenCategory(
   }
 
   return a.category.localeCompare(b.category);
+}
+
+export function getTopRecommendations(
+  data: QuizData,
+  limit = 5
+): RecommendationItem[] {
+  return getRecommendations(data).slice(0, limit);
+}
+
+export function getRecommendationsByCategory(
+  data: QuizData,
+  category: ProductCategory
+): RecommendationItem[] {
+  return getRecommendations(data).filter((item) => item.category === category);
 }

@@ -24,15 +24,44 @@ import {
 
 type HealthAssessment = {
   id: number;
-  created_at: string;
-  age: string;
-  sex: string;
-  stress: string;
-  sleep: string;
-  goal: string;
-  score: number;
-  summary: string;
-  factors: string[];
+  created_at?: string | null;
+
+  assessment_version?: string | null;
+  plan?: string | null;
+  ai_mode?: string | null;
+  generated_by?: string | null;
+
+  age?: number | string | null;
+  sex?: string | null;
+  stress?: string | null;
+  sleep?: string | null;
+  goal?: string | null;
+  main_goal?: string | null;
+
+  score?: number | null;
+  summary?: string | null;
+  factors?: string[] | null;
+
+  health_score?: number | null;
+  sleep_score?: number | null;
+  stress_score?: number | null;
+  energy_score?: number | null;
+  focus_score?: number | null;
+  metabolic_score?: number | null;
+
+  confidence_level?: "high" | "moderate" | "limited" | string | null;
+  confidence_explanation?: string | null;
+
+  executive_summary?: string | null;
+  clinical_style_summary?: string | null;
+  score_narrative?: string | null;
+  professional_followup_advice?: string | null;
+
+  strengths?: string[] | null;
+  main_drivers?: string[] | null;
+  priority_actions?: string[] | null;
+  risk_signals?: string[] | null;
+
   user_id?: string | null;
 };
 
@@ -100,7 +129,42 @@ export default function HistoryPage() {
 
         const { data, error } = await supabase
           .from("health_assessments")
-          .select("*")
+          .select(
+            `
+            id,
+            created_at,
+            assessment_version,
+            plan,
+            ai_mode,
+            generated_by,
+            age,
+            sex,
+            stress,
+            sleep,
+            goal,
+            main_goal,
+            score,
+            summary,
+            factors,
+            health_score,
+            sleep_score,
+            stress_score,
+            energy_score,
+            focus_score,
+            metabolic_score,
+            confidence_level,
+            confidence_explanation,
+            executive_summary,
+            clinical_style_summary,
+            score_narrative,
+            professional_followup_advice,
+            strengths,
+            main_drivers,
+            priority_actions,
+            risk_signals,
+            user_id
+          `
+          )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
@@ -143,16 +207,17 @@ export default function HistoryPage() {
       .reverse()
       .map((item, index) => ({
         name: `Análisis ${index + 1}`,
-        score: Number(item.score || 0),
+        score: resolveHealthScore(item),
         fecha: formatDate(item.created_at),
-      }));
+      }))
+      .filter((item) => item.score > 0);
   }, [items]);
 
   const latest = items[0] ?? null;
   const previous = items[1] ?? null;
 
-  const latestScore = latest?.score ?? null;
-  const previousScore = previous?.score ?? null;
+  const latestScore = latest ? resolveHealthScore(latest) : null;
+  const previousScore = previous ? resolveHealthScore(previous) : null;
 
   const scoreDelta =
     latestScore !== null && previousScore !== null
@@ -160,15 +225,40 @@ export default function HistoryPage() {
       : null;
 
   const averageScore = useMemo(() => {
-    if (items.length === 0) return null;
-    const total = items.reduce((acc, item) => acc + Number(item.score || 0), 0);
-    return Math.round(total / items.length);
+    const valid = items
+      .map((item) => resolveHealthScore(item))
+      .filter((value) => value > 0);
+
+    if (valid.length === 0) return null;
+    return Math.round(valid.reduce((acc, value) => acc + value, 0) / valid.length);
   }, [items]);
 
   const bestScore = useMemo(() => {
-    if (items.length === 0) return null;
-    return Math.max(...items.map((item) => Number(item.score || 0)));
+    const valid = items
+      .map((item) => resolveHealthScore(item))
+      .filter((value) => value > 0);
+
+    if (valid.length === 0) return null;
+    return Math.max(...valid);
   }, [items]);
+
+  const latestConfidence = normalizeConfidence(latest?.confidence_level);
+  const confidenceNarrative = useMemo(() => {
+    if (!latest) return "Aún no hay análisis visible.";
+    if (latest.confidence_explanation?.trim()) {
+      return latest.confidence_explanation.trim();
+    }
+
+    if (latestConfidence === "high") {
+      return "El sistema tuvo suficiente contexto para construir una lectura más sólida.";
+    }
+
+    if (latestConfidence === "moderate") {
+      return "El sistema tuvo una base útil, aunque todavía con contexto parcial.";
+    }
+
+    return "La lectura fue construida con contexto limitado. Repetir el análisis con más datos puede hacerla más útil.";
+  }, [latest, latestConfidence]);
 
   const progressNarrative = useMemo(() => {
     if (items.length === 0) {
@@ -232,7 +322,7 @@ export default function HistoryPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <div className="rounded-2xl bg-white p-8 shadow-sm">
           <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
             VitaSmart AI · Historial
@@ -243,8 +333,9 @@ export default function HistoryPage() {
           </h1>
 
           <p className="mt-3 text-slate-600">
-            Aquí puedes ver tus análisis guardados, detectar cambios y construir
-            una visión más clara de tu progreso con el tiempo.
+            Aquí puedes ver tus análisis guardados, detectar cambios, revisar
+            la profundidad de tus resultados y construir una visión más clara de
+            tu progreso con el tiempo.
           </p>
 
           {!needsLogin && (
@@ -268,6 +359,12 @@ export default function HistoryPage() {
                 Límite visible:{" "}
                 {Number.isFinite(planLimit) ? planLimit : "Ilimitado"}
               </span>
+
+              {latest ? (
+                <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                  Última confianza: {translateConfidence(latestConfidence)}
+                </span>
+              ) : null}
             </div>
           )}
 
@@ -307,6 +404,17 @@ export default function HistoryPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {latest && (
+            <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-5">
+              <div className="text-sm font-semibold text-sky-900">
+                Estado del último análisis
+              </div>
+              <p className="mt-2 text-sm leading-6 text-sky-800">
+                {confidenceNarrative}
+              </p>
             </div>
           )}
 
@@ -434,7 +542,8 @@ export default function HistoryPage() {
                   </h2>
                   <p className="mt-2 text-slate-600">
                     El valor del historial no está solo en guardar datos, sino
-                    en observar tendencias y repetir mediciones con continuidad.
+                    en observar tendencias, repetir mediciones con continuidad y
+                    entender si tus resultados se están moviendo en la dirección correcta.
                   </p>
                 </div>
 
@@ -523,81 +632,237 @@ export default function HistoryPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {items.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="rounded-2xl bg-white p-6 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-sm text-slate-500">
-                              {formatDate(item.created_at)}
+                  {items.map((item, index) => {
+                    const score = resolveHealthScore(item);
+                    const executiveSummary =
+                      item.executive_summary?.trim() ||
+                      item.summary?.trim() ||
+                      "Sin resumen disponible.";
+
+                    const clinicalSummary =
+                      item.clinical_style_summary?.trim() || "";
+
+                    const scoreNarrative =
+                      item.score_narrative?.trim() || "";
+
+                    const followUp =
+                      item.professional_followup_advice?.trim() || "";
+
+                    const strengths = sanitizeStringArray(item.strengths);
+                    const drivers = sanitizeStringArray(
+                      item.main_drivers || item.factors
+                    );
+                    const priorities = sanitizeStringArray(item.priority_actions);
+                    const riskSignals = sanitizeStringArray(item.risk_signals);
+
+                    const confidence = normalizeConfidence(item.confidence_level);
+                    const subscores = [
+                      {
+                        label: "Sleep",
+                        value:
+                          typeof item.sleep_score === "number"
+                            ? item.sleep_score
+                            : null,
+                      },
+                      {
+                        label: "Stress",
+                        value:
+                          typeof item.stress_score === "number"
+                            ? item.stress_score
+                            : null,
+                      },
+                      {
+                        label: "Energy",
+                        value:
+                          typeof item.energy_score === "number"
+                            ? item.energy_score
+                            : null,
+                      },
+                      {
+                        label: "Focus",
+                        value:
+                          typeof item.focus_score === "number"
+                            ? item.focus_score
+                            : null,
+                      },
+                      {
+                        label: "Metabolic",
+                        value:
+                          typeof item.metabolic_score === "number"
+                            ? item.metabolic_score
+                            : null,
+                      },
+                    ];
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-2xl bg-white p-6 shadow-sm"
+                      >
+                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-sm text-slate-500">
+                                {formatDate(item.created_at)}
+                              </div>
+
+                              {index === 0 && (
+                                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+                                  Más reciente
+                                </span>
+                              )}
+
+                              {index === items.length - 1 && items.length > 1 && (
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                  Más antiguo visible
+                                </span>
+                              )}
+
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                                {translateConfidence(confidence)}
+                              </span>
+
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                                {normalizeAiMode(item.ai_mode) === "advanced"
+                                  ? "IA avanzada"
+                                  : "IA base"}
+                              </span>
+
+                              {item.assessment_version ? (
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                                  {item.assessment_version}
+                                </span>
+                              ) : null}
                             </div>
 
-                            {index === 0 && (
-                              <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-                                Más reciente
-                              </span>
-                            )}
+                            <h2 className="mt-3 text-xl font-semibold text-slate-900">
+                              Score {score}/100
+                            </h2>
 
-                            {index === items.length - 1 && items.length > 1 && (
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                                Más antiguo visible
-                              </span>
-                            )}
-                          </div>
+                            <p className="mt-2 text-slate-600">
+                              {executiveSummary}
+                            </p>
 
-                          <h2 className="mt-2 text-xl font-semibold text-slate-900">
-                            Score {item.score}/100
-                          </h2>
-
-                          <p className="mt-2 text-slate-600">{item.summary}</p>
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <Badge label={`Edad: ${item.age}`} />
-                            <Badge label={`Sexo: ${translateSex(item.sex)}`} />
-                            <Badge
-                              label={`Estrés: ${translateStress(item.stress)}`}
-                            />
-                            <Badge
-                              label={`Sueño: ${translateSleep(item.sleep)}`}
-                            />
-                            <Badge
-                              label={`Objetivo: ${translateGoal(item.goal)}`}
-                            />
-                          </div>
-
-                          <div className="mt-4">
-                            <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                              Factores principales
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <Badge
+                                label={`Edad: ${
+                                  item.age != null && item.age !== ""
+                                    ? String(item.age)
+                                    : "-"
+                                }`}
+                              />
+                              <Badge label={`Sexo: ${translateSex(item.sex)}`} />
+                              <Badge
+                                label={`Estrés: ${translateStress(item.stress)}`}
+                              />
+                              <Badge
+                                label={`Sueño: ${translateSleep(item.sleep)}`}
+                              />
+                              <Badge
+                                label={`Objetivo: ${translateGoal(
+                                  item.main_goal || item.goal
+                                )}`}
+                              />
+                              <Badge
+                                label={`Plan: ${getPlanLabel(
+                                  normalizePlan(item.plan)
+                                )}`}
+                              />
                             </div>
+                          </div>
 
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {Array.isArray(item.factors) &&
-                                item.factors.map((factor, factorIndex) => (
-                                  <span
-                                    key={factorIndex}
-                                    className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
-                                  >
-                                    {factor}
-                                  </span>
-                                ))}
+                          <div className="rounded-2xl bg-slate-900 px-6 py-4 text-center text-white md:min-w-[160px]">
+                            <div className="text-sm text-slate-300">
+                              Health Score
+                            </div>
+                            <div className="mt-1 text-3xl font-bold">
+                              {score}
                             </div>
                           </div>
                         </div>
 
-                        <div className="rounded-2xl bg-slate-900 px-6 py-4 text-center text-white md:min-w-[140px]">
-                          <div className="text-sm text-slate-300">
-                            Health Score
-                          </div>
-                          <div className="mt-1 text-3xl font-bold">
-                            {item.score}
-                          </div>
+                        <div className="mt-6 grid gap-3 md:grid-cols-5">
+                          {subscores.map((sub) => (
+                            <SubscoreCard
+                              key={sub.label}
+                              label={sub.label}
+                              value={sub.value}
+                            />
+                          ))}
                         </div>
+
+                        {clinicalSummary ? (
+                          <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                            <div className="text-sm font-semibold text-sky-900">
+                              Resumen clínico-preventivo
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-sky-800">
+                              {clinicalSummary}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                          <HistoryListPanel
+                            title="Fortalezas"
+                            items={strengths}
+                            emptyText="No se registraron fortalezas específicas."
+                          />
+
+                          <HistoryListPanel
+                            title="Factores dominantes"
+                            items={drivers}
+                            emptyText="No se registraron factores dominantes."
+                          />
+
+                          <HistoryListPanel
+                            title="Prioridades sugeridas"
+                            items={priorities}
+                            emptyText="No se registraron prioridades específicas."
+                          />
+                        </div>
+
+                        {(scoreNarrative || followUp) && (
+                          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                            <HistoryTextPanel
+                              title="Narrativa del score"
+                              text={
+                                scoreNarrative ||
+                                "No se registró narrativa estructurada del score."
+                              }
+                            />
+
+                            <HistoryTextPanel
+                              title="Follow-up advice"
+                              text={
+                                followUp ||
+                                "No se registró consejo de seguimiento."
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {riskSignals.length > 0 && (
+                          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                            <div className="text-sm font-semibold text-amber-900">
+                              Risk signals
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {riskSignals.map((signal, signalIndex) => (
+                                <span
+                                  key={signalIndex}
+                                  className="rounded-full bg-white/80 px-3 py-1 text-sm text-amber-900"
+                                >
+                                  {signal}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -655,8 +920,95 @@ function Badge({ label }: { label: string }) {
   );
 }
 
-function formatDate(value: string) {
+function SubscoreCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-slate-600">{label}</span>
+        <span className="text-sm font-semibold text-slate-900">
+          {value ?? "N/A"}
+        </span>
+      </div>
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${
+            value == null
+              ? "bg-slate-200"
+              : value >= 80
+              ? "bg-emerald-500"
+              : value >= 60
+              ? "bg-amber-500"
+              : "bg-rose-500"
+          }`}
+          style={{ width: `${value ?? 0}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function HistoryListPanel({
+  title,
+  items,
+  emptyText,
+}: {
+  title: string;
+  items: string[];
+  emptyText: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </div>
+
+      {items.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {items.map((item, index) => (
+            <div
+              key={`${item}-${index}`}
+              className="rounded-xl bg-white px-3 py-2 text-sm leading-6 text-slate-700"
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm leading-6 text-slate-500">{emptyText}</p>
+      )}
+    </div>
+  );
+}
+
+function HistoryTextPanel({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </div>
+      <p className="mt-3 text-sm leading-7 text-slate-700">{text}</p>
+    </div>
+  );
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Sin fecha";
   const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
 
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "medium",
@@ -664,20 +1016,49 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-function translateSex(value: string) {
+function resolveHealthScore(item: HealthAssessment): number {
+  if (typeof item.health_score === "number") return item.health_score;
+  if (typeof item.score === "number") return item.score;
+  return 0;
+}
+
+function normalizeAiMode(value?: string | null): "basic" | "advanced" {
+  return value === "advanced" ? "advanced" : "basic";
+}
+
+function normalizeConfidence(
+  value?: string | null
+): "high" | "moderate" | "limited" {
+  if (value === "high") return "high";
+  if (value === "moderate") return "moderate";
+  return "limited";
+}
+
+function sanitizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function translateConfidence(value: "high" | "moderate" | "limited") {
+  if (value === "high") return "Alta confianza";
+  if (value === "moderate") return "Confianza media";
+  return "Confianza limitada";
+}
+
+function translateSex(value?: string | null) {
   if (value === "male") return "Hombre";
   if (value === "female") return "Mujer";
   return value || "-";
 }
 
-function translateStress(value: string) {
+function translateStress(value?: string | null) {
   if (value === "low") return "Bajo";
   if (value === "medium") return "Medio";
   if (value === "high") return "Alto";
   return value || "-";
 }
 
-function translateSleep(value: string) {
+function translateSleep(value?: string | null) {
   if (value === "5") return "Menos de 5 horas";
   if (value === "6") return "6 horas";
   if (value === "7") return "7 horas";
@@ -685,10 +1066,13 @@ function translateSleep(value: string) {
   return value || "-";
 }
 
-function translateGoal(value: string) {
+function translateGoal(value?: string | null) {
   if (value === "energy") return "Más energía";
   if (value === "focus") return "Mejor concentración";
   if (value === "sleep") return "Dormir mejor";
   if (value === "health") return "Salud general";
+  if (value === "general_health") return "Salud general";
+  if (value === "weight") return "Peso / soporte metabólico";
+  if (value === "recovery") return "Recuperación";
   return value || "-";
 }

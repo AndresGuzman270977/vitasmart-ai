@@ -19,6 +19,22 @@ export type Product = {
   description: string;
 };
 
+/**
+ * LEGACY PRODUCT CATALOG
+ *
+ * Este archivo se mantiene como compatibilidad temporal con partes
+ * anteriores de la aplicación. La nueva arquitectura premium debe
+ * apoyarse principalmente en:
+ *
+ * - app/lib/catalog/ingredientCatalog.ts
+ * - app/lib/catalog/productCatalog.ts
+ * - app/lib/recommendationEngine/*
+ * - app/api/health-analysis/route.ts
+ *
+ * Mientras la migración total termina, este catálogo sigue disponible
+ * para no romper imports o flujos viejos.
+ */
+
 export const PRODUCTS: Product[] = [
   {
     slug: "multivitamin-men-40",
@@ -202,11 +218,62 @@ export const PRODUCTS: Product[] = [
   },
 ];
 
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
 export function getProductBySlug(slug: string): Product | undefined {
-  const normalizedSlug = String(slug || "").trim().toLowerCase();
-  return PRODUCTS.find((product) => product.slug === normalizedSlug);
+  const normalizedSlug = normalizeText(slug);
+  return PRODUCTS.find((product) => normalizeText(product.slug) === normalizedSlug);
 }
 
 export function getProductsByCategory(category: ProductCategory): Product[] {
   return PRODUCTS.filter((product) => product.category === category);
+}
+
+export function getProductsByPriority(priority: ProductPriority): Product[] {
+  return PRODUCTS.filter((product) => product.priority === priority);
+}
+
+export function searchProducts(term: string): Product[] {
+  const normalizedTerm = normalizeText(term);
+
+  if (!normalizedTerm) return PRODUCTS;
+
+  return PRODUCTS.filter((product) =>
+    [
+      product.slug,
+      product.supplementName,
+      product.brand,
+      product.productName,
+      product.category,
+      product.priority,
+      product.description,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedTerm)
+  );
+}
+
+export function getRelatedProductsByCategory(
+  slug: string,
+  limit = 3
+): Product[] {
+  const current = getProductBySlug(slug);
+  if (!current) return [];
+
+  return PRODUCTS.filter(
+    (product) =>
+      product.slug !== current.slug && product.category === current.category
+  ).slice(0, limit);
+}
+
+export function getLegacyProductCatalogMeta() {
+  return {
+    total: PRODUCTS.length,
+    categories: Array.from(new Set(PRODUCTS.map((product) => product.category))),
+    priorities: Array.from(new Set(PRODUCTS.map((product) => product.priority))),
+    isLegacyCatalog: true,
+  } as const;
 }
