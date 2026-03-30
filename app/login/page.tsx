@@ -65,10 +65,8 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data.session?.user) {
-          void ensureUserProfile().catch((profileError) => {
-            console.error("Error creando perfil tras signup:", profileError);
-          });
-
+          await ensureUserProfile();
+          await new Promise((res) => setTimeout(res, 300));
           router.replace(nextPath);
           return;
         }
@@ -79,13 +77,20 @@ export default function LoginPage() {
         return;
       }
 
-      const { error } = await signInWithEmail(email, password);
+      const { data, error } = await signInWithEmail(email, password);
 
       if (error) throw error;
 
-      void ensureUserProfile().catch((profileError) => {
-        console.error("Error asegurando perfil tras login:", profileError);
-      });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        throw new Error("No se pudo establecer la sesión.");
+      }
+
+      await ensureUserProfile();
+      await new Promise((res) => setTimeout(res, 300));
 
       router.replace(nextPath);
     } catch (error: any) {
@@ -339,6 +344,10 @@ function translateAuthError(message: string) {
 
   if (message.includes("signup is disabled")) {
     return "El registro de usuarios está deshabilitado en Supabase.";
+  }
+
+  if (message.includes("No se pudo establecer la sesión.")) {
+    return "No se pudo establecer la sesión. Intenta nuevamente.";
   }
 
   return message;
