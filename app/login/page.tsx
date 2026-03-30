@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signInWithEmail, signUpWithEmail } from "../lib/auth";
 import { supabase } from "../lib/supabase";
@@ -9,6 +9,7 @@ import { ensureUserProfile } from "../lib/profile";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
@@ -16,6 +17,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [checkingSession, setCheckingSession] = useState(true);
+
+  const nextPath = useMemo(() => {
+    const raw = searchParams.get("next");
+    if (!raw || !raw.startsWith("/")) return "/dashboard";
+    if (raw.startsWith("//")) return "/dashboard";
+    return raw;
+  }, [searchParams]);
 
   useEffect(() => {
     let ignore = false;
@@ -29,6 +37,8 @@ export default function LoginPage() {
         if (!ignore && session?.user) {
           router.replace("/dashboard");
         }
+      } catch (error) {
+        console.error("Error verificando sesión:", error);
       } finally {
         if (!ignore) {
           setCheckingSession(false);
@@ -55,24 +65,36 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data.session?.user) {
-          await ensureUserProfile();
-          router.push("/dashboard");
+          void ensureUserProfile().catch((profileError) => {
+            console.error("Error creando perfil tras signup:", profileError);
+          });
+
+          router.replace(nextPath);
           return;
         }
 
         setMessage(
           "Cuenta creada. Si la confirmación de correo está activa, revisa tu email antes de iniciar sesión."
         );
-      } else {
-        const { error } = await signInWithEmail(email, password);
-
-        if (error) throw error;
-
-        await ensureUserProfile();
-        router.push("/dashboard");
+        return;
       }
+
+      const { error } = await signInWithEmail(email, password);
+
+      if (error) throw error;
+
+      void ensureUserProfile().catch((profileError) => {
+        console.error("Error asegurando perfil tras login:", profileError);
+      });
+
+      router.replace(nextPath);
     } catch (error: any) {
-      setMessage(translateAuthError(error?.message || "Ocurrió un error."));
+      console.error("Auth submit error:", error);
+      setMessage(
+        translateAuthError(
+          error?.message || "Ocurrió un error al intentar autenticarte."
+        )
+      );
     } finally {
       setLoading(false);
     }
