@@ -1,27 +1,46 @@
 "use client";
 
+type Locale = "es" | "en";
+
 type ProductEvidenceBadgeProps = {
   evidenceLevel?: "high" | "moderate" | "limited";
+  locale?: Locale;
 };
+
+const textByLocale = {
+  es: {
+    high: "Evidencia alta",
+    moderate: "Evidencia moderada",
+    limited: "Evidencia limitada",
+  },
+  en: {
+    high: "High evidence",
+    moderate: "Moderate evidence",
+    limited: "Limited evidence",
+  },
+} as const;
 
 export default function ProductEvidenceBadge({
   evidenceLevel,
+  locale = "es",
 }: ProductEvidenceBadgeProps) {
   if (!evidenceLevel) return null;
+
+  const t = textByLocale[locale] ?? textByLocale.es;
 
   const config =
     evidenceLevel === "high"
       ? {
-          label: "Evidence high",
+          label: t.high,
           className: "border-emerald-200 bg-emerald-50 text-emerald-700",
         }
       : evidenceLevel === "moderate"
       ? {
-          label: "Evidence moderate",
+          label: t.moderate,
           className: "border-amber-200 bg-amber-50 text-amber-700",
         }
       : {
-          label: "Evidence limited",
+          label: t.limited,
           className: "border-slate-200 bg-slate-100 text-slate-700",
         };
 
