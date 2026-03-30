@@ -8,6 +8,8 @@ import ProductQualityBadge from "../../../components/marketplace/ProductQualityB
 import ProductSafetyPanel from "../../../components/marketplace/ProductSafetyPanel";
 import ProductEvidenceBadge from "../../../components/marketplace/ProductEvidenceBadge";
 
+type Locale = "es" | "en";
+
 type ProductRecommendationView = {
   product: {
     slug: string;
@@ -73,6 +75,7 @@ type FlattenedProductItem = {
 };
 
 const LAST_ANALYSIS_CACHE_KEY = "vitaSmartLastHealthAnalysis";
+const LOCALE: Locale = "es";
 
 function getStoredAnalysis(): HealthAnalysisResponse | null {
   if (typeof window === "undefined") return null;
@@ -195,15 +198,18 @@ export default function ProductDetailPage() {
           </Link>
 
           <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-1 text-sm text-slate-600 shadow-sm">
-            VitaSmart AI · Product Detail
+            VitaSmart AI · Detalle de producto
           </div>
         </div>
 
         <section className="grid gap-8 lg:grid-cols-3">
           <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 lg:col-span-2">
             <div className="flex flex-wrap items-center gap-2">
-              <ProductQualityBadge value={tier} />
-              <ProductEvidenceBadge evidenceLevel={ingredient.evidenceLevel} />
+              <ProductQualityBadge value={tier} locale={LOCALE} />
+              <ProductEvidenceBadge
+                evidenceLevel={ingredient.evidenceLevel}
+                locale={LOCALE}
+              />
               <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
                 Selección VitaSmart
               </span>
@@ -223,6 +229,7 @@ export default function ProductDetailPage() {
                   src={product.imageUrl}
                   alt={product.productName}
                   className="h-[360px] w-full object-cover"
+                  loading="lazy"
                 />
               ) : (
                 <div className="flex h-[360px] items-center justify-center text-sm text-slate-400">
@@ -241,28 +248,33 @@ export default function ProductDetailPage() {
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Este producto aparece dentro del ecosistema VitaSmart AI como
                 una opción relevante dentro de un comparador estructurado por
-                ingrediente, evidencia, contexto de calidad y tier de presupuesto.
+                ingrediente, evidencia, contexto de calidad y tier de
+                presupuesto.
               </p>
 
               {ingredient.evidenceSummary ? (
                 <p className="mt-4 text-sm leading-6 text-slate-600">
-                  <strong className="text-slate-900">Evidencia resumida:</strong>{" "}
+                  <strong className="text-slate-900">
+                    Evidencia resumida:
+                  </strong>{" "}
                   {ingredient.evidenceSummary}
                 </p>
               ) : null}
 
               {ingredient.scientificContext ? (
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  <strong className="text-slate-900">Contexto científico:</strong>{" "}
+                  <strong className="text-slate-900">
+                    Contexto científico:
+                  </strong>{" "}
                   {ingredient.scientificContext}
                 </p>
               ) : null}
             </div>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              <ProductVisualScore label="Fit" value={view.fitScore} />
-              <ProductVisualScore label="Quality" value={view.qualityScore} />
-              <ProductVisualScore label="Value" value={view.valueScore} />
+              <ProductVisualScore label="Ajuste" value={view.fitScore} />
+              <ProductVisualScore label="Calidad" value={view.qualityScore} />
+              <ProductVisualScore label="Valor" value={view.valueScore} />
             </div>
 
             <div className="mt-10">
@@ -305,6 +317,7 @@ export default function ProductDetailPage() {
                           | "THIRD_PARTY_TESTED"
                           | "NONE"
                       }
+                      locale={LOCALE}
                     />
                   ))}
                 </div>
@@ -338,6 +351,7 @@ export default function ProductDetailPage() {
                 restrictionsSummary={narratives.restrictionsSummary}
                 sideEffectsSummary={narratives.sideEffectsSummary}
                 cautions={ingredient.cautions}
+                locale={LOCALE}
               />
             </div>
 
@@ -607,7 +621,10 @@ export default function ProductDetailPage() {
                     className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50"
                   >
                     <div className="flex flex-wrap gap-2">
-                      <ProductEvidenceBadge evidenceLevel={item.evidenceLevel} />
+                      <ProductEvidenceBadge
+                        evidenceLevel={item.evidenceLevel}
+                        locale={LOCALE}
+                      />
                     </div>
 
                     <h3 className="mt-4 text-xl font-semibold text-slate-900">

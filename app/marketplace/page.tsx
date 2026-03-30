@@ -16,6 +16,8 @@ import IngredientHighlightCard from "../../components/marketplace/IngredientHigh
 import BudgetComparisonGrid from "../../components/marketplace/BudgetComparisonGrid";
 import RelatedRecommendationsSection from "../../components/marketplace/RelatedRecommendationsSection";
 
+type Locale = "es" | "en";
+
 type ProductRecommendationView = {
   product: {
     slug: string;
@@ -141,6 +143,7 @@ type TierFilter = "all" | "excellent" | "very_good" | "good";
 
 const QUIZ_STORAGE_KEY = "vitaSmartQuizDraft";
 const LAST_ANALYSIS_CACHE_KEY = "vitaSmartLastHealthAnalysis";
+const LOCALE: Locale = "es";
 
 export default function MarketplacePage() {
   const [loading, setLoading] = useState(true);
@@ -424,9 +427,7 @@ export default function MarketplacePage() {
       draft.assessment.mainGoal || ""
     )}, estrés ${translateStressLevel(
       draft.assessment.stressLevel
-    )} y sueño ${translateSleepHours(
-      draft.assessment.sleepHours
-    )}.`;
+    )} y sueño ${translateSleepHours(draft.assessment.sleepHours)}.`;
   }, [draft]);
 
   return (
@@ -493,13 +494,15 @@ export default function MarketplacePage() {
 
           {smartMarketplaceEnabled && analysis?.productRecommendations?.length ? (
             <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-              Estás viendo recomendaciones priorizadas según tu análisis más reciente:{" "}
-              <strong>{latestContextNarrative}</strong>
+              Estás viendo recomendaciones priorizadas según tu análisis más
+              reciente: <strong>{latestContextNarrative}</strong>
             </div>
-          ) : smartMarketplaceEnabled && !analysis?.productRecommendations?.length ? (
+          ) : smartMarketplaceEnabled &&
+            !analysis?.productRecommendations?.length ? (
             <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              Tu plan ya permite una experiencia más inteligente, pero todavía no
-              hay un análisis reciente con suficiente contexto para personalizar el ranking.
+              Tu plan ya permite una experiencia más inteligente, pero todavía
+              no hay un análisis reciente con suficiente contexto para
+              personalizar el ranking.
               <div className="mt-3">
                 <Link
                   href="/quiz"
@@ -648,9 +651,7 @@ export default function MarketplacePage() {
 
         {loading ? (
           <div className="mt-8 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-            <p className="text-slate-600">
-              Cargando marketplace inteligente...
-            </p>
+            <p className="text-slate-600">Cargando marketplace inteligente...</p>
           </div>
         ) : error ? (
           <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-8 shadow-sm">
@@ -694,7 +695,8 @@ export default function MarketplacePage() {
                           setSelectedIngredientSlug(item.ingredientSlug)
                         }
                         className={`rounded-3xl p-6 text-left shadow-sm ring-1 transition ${
-                          selectedIngredient?.ingredientSlug === item.ingredientSlug
+                          selectedIngredient?.ingredientSlug ===
+                          item.ingredientSlug
                             ? "border border-blue-200 bg-white ring-blue-200"
                             : "bg-white ring-slate-200 hover:bg-slate-50"
                         }`}
@@ -776,7 +778,10 @@ export default function MarketplacePage() {
                 </div>
 
                 <div className="mt-8">
-                  <IngredientHighlightCard item={selectedIngredient} />
+                  <IngredientHighlightCard
+                    item={selectedIngredient}
+                    locale={LOCALE}
+                  />
                 </div>
 
                 <section className="mt-8">
@@ -796,7 +801,10 @@ export default function MarketplacePage() {
                     </div>
                   </div>
 
-                  <BudgetComparisonGrid ingredient={selectedIngredient} />
+                  <BudgetComparisonGrid
+                    ingredient={selectedIngredient}
+                    locale={LOCALE}
+                  />
                 </section>
 
                 <section className="mt-12">
@@ -822,7 +830,8 @@ export default function MarketplacePage() {
                         No encontramos ingredientes con esos filtros
                       </h3>
                       <p className="mt-3 text-slate-600">
-                        Ajusta la búsqueda o los filtros para encontrar más opciones.
+                        Ajusta la búsqueda o los filtros para encontrar más
+                        opciones.
                       </p>
                     </div>
                   ) : (
@@ -919,7 +928,8 @@ export default function MarketplacePage() {
                           Más ingredientes del catálogo actual
                         </h2>
                         <p className="mt-2 text-slate-600">
-                          Ingredientes que siguen dentro del perfil actual pero no están arriba del todo en tu selección visible.
+                          Ingredientes que siguen dentro del perfil actual pero
+                          no están arriba del todo en tu selección visible.
                         </p>
                       </div>
 
@@ -964,9 +974,9 @@ export default function MarketplacePage() {
                     Catálogo base disponible
                   </h2>
                   <p className="mt-3 text-slate-600">
-                    Todavía no hay suficiente contexto para construir un comparador
-                    premium completo. Haz un análisis reciente para activar la
-                    experiencia personalizada.
+                    Todavía no hay suficiente contexto para construir un
+                    comparador premium completo. Haz un análisis reciente para
+                    activar la experiencia personalizada.
                   </p>
 
                   <div className="mt-5 flex flex-col gap-3 sm:flex-row">
