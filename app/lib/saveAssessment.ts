@@ -363,12 +363,30 @@ function buildBiomarkerPayload(
 }
 
 function isOptionalColumnFallbackError(message: string): boolean {
+  const normalized = message.toLowerCase();
+
   return (
-    message.includes("column") ||
-    message.includes("schema cache") ||
-    message.includes("does not exist") ||
-    message.includes("could not find") ||
-    message.includes("unknown column")
+    (normalized.includes("column") &&
+      (normalized.includes("does not exist") ||
+        normalized.includes("schema cache") ||
+        normalized.includes("could not find") ||
+        normalized.includes("unknown column"))) ||
+    (normalized.includes("relation") && normalized.includes("does not exist")) ||
+    (normalized.includes("assessment_biomarkers") &&
+      normalized.includes("does not exist"))
+  );
+}
+
+function isBiomarkerTableCompatibilityError(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("assessment_biomarkers") &&
+    (normalized.includes("does not exist") ||
+      normalized.includes("schema cache") ||
+      normalized.includes("column") ||
+      normalized.includes("could not find") ||
+      normalized.includes("unknown column"))
   );
 }
 
@@ -406,10 +424,7 @@ function buildLegacyFallbackFromExpanded(
 
   return buildLegacyPayload(
     {
-      age:
-        data.age != null && data.age !== ""
-          ? String(data.age)
-          : "",
+      age: data.age != null && data.age !== "" ? String(data.age) : "",
       sex: sanitizeString(data.sex),
       stress: mapStressLevelToLegacy(data.stressLevel),
       sleep: mapSleepHoursToLegacy(data.sleepHours),
@@ -446,7 +461,11 @@ async function insertBiomarkers(assessmentId: string, payload: LooseRow) {
 
   if (error) {
     const message = error.message?.toLowerCase() || "";
-    if (isOptionalColumnFallbackError(message)) {
+    if (isBiomarkerTableCompatibilityError(message)) {
+      console.warn(
+        "Biomarcadores no guardados por compatibilidad de esquema:",
+        error.message
+      );
       return;
     }
     throw error;
@@ -515,6 +534,14 @@ async function resolveUserPlanAndCounts(userId: string) {
   };
 }
 
+function buildFallbackGeneratedBy(
+  baseGeneratedBy: string,
+  mode: "expanded" | "legacy" | "legacy-fallback"
+): string {
+  const base = sanitizeString(baseGeneratedBy) || "vita-smart-ai";
+  return `${base}:${mode}`;
+}
+
 export async function saveAssessment(
   data: SaveAssessmentInput,
   metadata?: SaveAssessmentMetadata
@@ -558,20 +585,16 @@ export async function saveAssessment(
       ...buildLegacyPayload(data, user.id),
       plan: userPlan,
       ai_mode: finalAiMode,
-      generated_by: generatedBy,
+      generated_by: buildFallbackGeneratedBy(generatedBy, "legacy"),
     };
 
-    try {
-      await insertLegacyCompatiblePayload(insertPayload, true);
+    await insertLegacyCompatiblePayload(insertPayload, true);
 
-      return {
-        saved: true,
-        plan: userPlan,
-        aiModeApplied: finalAiMode,
-      };
-    } catch (error) {
-      throw error;
-    }
+    return {
+      saved: true,
+      plan: userPlan,
+      aiModeApplied: finalAiMode,
+    };
   }
 
   validateExpandedPayload(data);
@@ -581,7 +604,7 @@ export async function saveAssessment(
     user.id,
     userPlan,
     finalAiMode,
-    generatedBy
+    buildFallbackGeneratedBy(generatedBy, "expanded")
   );
 
   try {
@@ -604,11 +627,16 @@ export async function saveAssessment(
       throw error;
     }
 
+    console.warn(
+      "Fallo al guardar payload expandido; se intentará fallback legacy controlado:",
+      error?.message || error
+    );
+
     const legacyFallbackPayload: LooseRow = {
       ...buildLegacyFallbackFromExpanded(data, user.id),
       plan: userPlan,
       ai_mode: finalAiMode,
-      generated_by: generatedBy,
+      generated_by: buildFallbackGeneratedBy(generatedBy, "legacy-fallback"),
     };
 
     await insertLegacyCompatiblePayload(legacyFallbackPayload, true);

@@ -77,7 +77,7 @@ export default function DashboardPage() {
           const profile = await getCurrentUserProfile();
           resolvedPlan = normalizePlan(profile?.plan);
         } catch (err) {
-          console.error("Unable to resolve dashboard plan:", err);
+          console.error("No se pudo resolver el plan del dashboard:", err);
         }
 
         if (!ignore) {
@@ -174,19 +174,27 @@ export default function DashboardPage() {
     return (
       latest.executive_summary?.trim() ||
       latest.summary?.trim() ||
+      buildGenericExecutiveSummary(latest) ||
       "Todavía no hay una narrativa ejecutiva disponible."
     );
   }, [latest]);
 
   const latestClinicalSummary = useMemo(() => {
     if (!latest) return "";
-    return latest.clinical_style_summary?.trim() || "";
+    return (
+      latest.clinical_style_summary?.trim() ||
+      buildClinicalFallback(latest) ||
+      ""
+    );
   }, [latest]);
 
   const latestNarrative = useMemo(() => {
     if (!latest) return "";
     return (
       latest.score_narrative?.trim() ||
+      latest.executive_summary?.trim() ||
+      latest.summary?.trim() ||
+      buildScoreNarrativeFallback(latest) ||
       "No se registró narrativa estructurada del score."
     );
   }, [latest]);
@@ -195,7 +203,8 @@ export default function DashboardPage() {
     if (!latest) return "";
     return (
       latest.professional_followup_advice?.trim() ||
-      "No se registró consejo de seguimiento."
+      buildFollowUpFallback(latest) ||
+      "No se registró recomendación de seguimiento."
     );
   }, [latest]);
 
@@ -242,12 +251,94 @@ export default function DashboardPage() {
     };
   }, [items]);
 
-  const mainDrivers = sanitizeStringArray(
-    latest?.main_drivers || latest?.factors || []
+  const mainDrivers = useMemo(
+    () => sanitizeStringArray(latest?.main_drivers || latest?.factors || []),
+    [latest]
   );
-  const priorityActions = sanitizeStringArray(latest?.priority_actions || []);
-  const strengths = sanitizeStringArray(latest?.strengths || []);
-  const riskSignals = sanitizeStringArray(latest?.risk_signals || []);
+
+  const priorityActions = useMemo(() => {
+    const direct = sanitizeStringArray(latest?.priority_actions || []);
+    if (direct.length > 0) return direct;
+
+    if (mainDrivers.length > 0) {
+      return mainDrivers.slice(0, 3).map((item) => `Priorizar mejora en: ${item}`);
+    }
+
+    return [];
+  }, [latest, mainDrivers]);
+
+  const strengths = useMemo(() => {
+    const direct = sanitizeStringArray(latest?.strengths || []);
+    if (direct.length > 0) return direct;
+
+    const fallback: string[] = [];
+
+    if ((latest?.sleep_score ?? 0) >= 80) fallback.push("Buen soporte en sueño");
+    if ((latest?.energy_score ?? 0) >= 80) fallback.push("Buena base de energía");
+    if ((latest?.focus_score ?? 0) >= 80) fallback.push("Buen soporte de enfoque");
+    if ((latest?.metabolic_score ?? 0) >= 80) {
+      fallback.push("Base metabólica favorable");
+    }
+    if ((latest?.stress_score ?? 0) >= 80) {
+      fallback.push("Manejo del estrés relativamente favorable");
+    }
+
+    return fallback;
+  }, [latest]);
+
+  const riskSignals = useMemo(() => {
+    const direct = sanitizeStringArray(latest?.risk_signals || []);
+    if (direct.length > 0) return direct;
+
+    const fallback: string[] = [];
+
+    if (
+      latest?.sleep_score != null &&
+      typeof latest.sleep_score === "number" &&
+      latest.sleep_score > 0 &&
+      latest.sleep_score < 60
+    ) {
+      fallback.push("Sueño con margen importante de mejora");
+    }
+
+    if (
+      latest?.stress_score != null &&
+      typeof latest.stress_score === "number" &&
+      latest.stress_score > 0 &&
+      latest.stress_score < 60
+    ) {
+      fallback.push("Señales de carga de estrés que conviene vigilar");
+    }
+
+    if (
+      latest?.energy_score != null &&
+      typeof latest.energy_score === "number" &&
+      latest.energy_score > 0 &&
+      latest.energy_score < 60
+    ) {
+      fallback.push("Energía diaria con oportunidad clara de optimización");
+    }
+
+    if (
+      latest?.focus_score != null &&
+      typeof latest.focus_score === "number" &&
+      latest.focus_score > 0 &&
+      latest.focus_score < 60
+    ) {
+      fallback.push("Enfoque y claridad mental con oportunidad de mejora");
+    }
+
+    if (
+      latest?.metabolic_score != null &&
+      typeof latest.metabolic_score === "number" &&
+      latest.metabolic_score > 0 &&
+      latest.metabolic_score < 60
+    ) {
+      fallback.push("Conviene reforzar seguimiento del soporte metabólico");
+    }
+
+    return fallback;
+  }, [latest]);
 
   const latestPlan = normalizePlan(latest?.plan);
   const latestAiMode = normalizeAiMode(latest?.ai_mode);
@@ -408,12 +499,12 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                  <MiniScoreCard label="Sleep" value={latest.sleep_score} />
-                  <MiniScoreCard label="Stress" value={latest.stress_score} />
-                  <MiniScoreCard label="Energy" value={latest.energy_score} />
-                  <MiniScoreCard label="Focus" value={latest.focus_score} />
+                  <MiniScoreCard label="Sueño" value={latest.sleep_score} />
+                  <MiniScoreCard label="Estrés" value={latest.stress_score} />
+                  <MiniScoreCard label="Energía" value={latest.energy_score} />
+                  <MiniScoreCard label="Enfoque" value={latest.focus_score} />
                   <MiniScoreCard
-                    label="Metabolic"
+                    label="Metabólico"
                     value={latest.metabolic_score}
                   />
                 </div>
@@ -460,10 +551,7 @@ export default function DashboardPage() {
                       label="Objetivo"
                       value={translateGoal(latest.main_goal)}
                     />
-                    <QuickRow
-                      label="Sexo"
-                      value={translateSex(latest.sex)}
-                    />
+                    <QuickRow label="Sexo" value={translateSex(latest.sex)} />
                     <QuickRow
                       label="Edad"
                       value={
@@ -524,7 +612,7 @@ export default function DashboardPage() {
               <TextPanel title="Narrativa del score" text={latestNarrative} />
 
               <TextPanel
-                title="Follow-up advice"
+                title="Recomendación de seguimiento"
                 text={latestFollowUp}
               />
             </section>
@@ -606,7 +694,7 @@ export default function DashboardPage() {
             {riskSignals.length > 0 ? (
               <section className="mt-8 rounded-3xl border border-amber-200 bg-amber-50 p-8 shadow-sm">
                 <h2 className="text-xl font-semibold tracking-tight text-amber-900">
-                  Risk signals recientes
+                  Señales de riesgo recientes
                 </h2>
 
                 <div className="mt-5 space-y-3">
@@ -724,7 +812,7 @@ function MiniScoreCard({
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-slate-600">{label}</span>
         <span className="text-sm font-semibold text-slate-900">
-          {score ?? "N/A"}
+          {score ?? "No disponible"}
         </span>
       </div>
 
@@ -905,4 +993,123 @@ function translateSex(value?: string | null) {
   if (value === "male") return "Hombre";
   if (value === "female") return "Mujer";
   return "-";
+}
+
+function buildGenericExecutiveSummary(
+  item: DashboardAssessmentRow | null
+): string {
+  if (!item) return "";
+
+  const score = resolveHealthScore(item);
+  const goal = translateGoal(item.main_goal);
+  const scoreText =
+    score >= 80
+      ? "muestra una base preventiva sólida"
+      : score >= 60
+      ? "muestra una base razonable con espacio de mejora"
+      : score > 0
+      ? "muestra una oportunidad clara de intervención y seguimiento"
+      : "requiere una lectura más completa";
+
+  if (goal !== "-") {
+    return `Tu último resultado ${scoreText}. Conviene interpretar este momento en relación con tu objetivo principal: ${goal.toLowerCase()}.`;
+  }
+
+  return `Tu último resultado ${scoreText}. Conviene usar esta lectura como punto de partida para seguir mejorando con continuidad.`;
+}
+
+function buildClinicalFallback(item: DashboardAssessmentRow | null): string {
+  if (!item) return "";
+
+  const blocks: string[] = [];
+
+  if (
+    typeof item.sleep_score === "number" &&
+    item.sleep_score > 0
+  ) {
+    blocks.push(`Sueño: ${item.sleep_score}/100`);
+  }
+
+  if (
+    typeof item.stress_score === "number" &&
+    item.stress_score > 0
+  ) {
+    blocks.push(`Estrés: ${item.stress_score}/100`);
+  }
+
+  if (
+    typeof item.energy_score === "number" &&
+    item.energy_score > 0
+  ) {
+    blocks.push(`Energía: ${item.energy_score}/100`);
+  }
+
+  if (
+    typeof item.focus_score === "number" &&
+    item.focus_score > 0
+  ) {
+    blocks.push(`Enfoque: ${item.focus_score}/100`);
+  }
+
+  if (
+    typeof item.metabolic_score === "number" &&
+    item.metabolic_score > 0
+  ) {
+    blocks.push(`Metabólico: ${item.metabolic_score}/100`);
+  }
+
+  if (blocks.length === 0) return "";
+
+  return `Lectura resumida por dominios clave del perfil actual: ${blocks.join(
+    " · "
+  )}.`;
+}
+
+function buildScoreNarrativeFallback(item: DashboardAssessmentRow | null): string {
+  if (!item) return "";
+
+  const score = resolveHealthScore(item);
+
+  if (score >= 85) {
+    return "El resultado actual sugiere una base preventiva fuerte. La prioridad ahora es sostener hábitos y ganar continuidad.";
+  }
+
+  if (score >= 70) {
+    return "El resultado actual muestra una base favorable, aunque todavía hay ajustes que podrían mejorar energía, enfoque o consistencia general.";
+  }
+
+  if (score >= 55) {
+    return "El resultado actual indica oportunidades visibles de mejora. La clave está en priorizar cambios sostenibles y medibles.";
+  }
+
+  if (score > 0) {
+    return "El resultado actual sugiere actuar con más intención y orden. Conviene priorizar seguimiento, hábitos base y revisión periódica.";
+  }
+
+  return "";
+}
+
+function buildFollowUpFallback(item: DashboardAssessmentRow | null): string {
+  if (!item) return "";
+
+  const goal = translateGoal(item.main_goal);
+  const score = resolveHealthScore(item);
+
+  if (score >= 80) {
+    return goal !== "-"
+      ? `Mantén seguimiento periódico de tu progreso y revisa si tus hábitos actuales siguen alineados con tu objetivo de ${goal.toLowerCase()}.`
+      : "Mantén seguimiento periódico para sostener tu base actual y detectar cambios de forma temprana.";
+  }
+
+  if (score >= 60) {
+    return goal !== "-"
+      ? `Conviene repetir el análisis más adelante y revisar si los ajustes implementados están mejorando tu objetivo de ${goal.toLowerCase()}.`
+      : "Conviene repetir el análisis más adelante para confirmar si los ajustes realizados están mejorando tu evolución.";
+  }
+
+  if (score > 0) {
+    return "Conviene priorizar seguimiento más cercano, ordenar acciones concretas y repetir el análisis para observar tendencia.";
+  }
+
+  return "";
 }
