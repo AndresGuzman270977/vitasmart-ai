@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "../app/lib/supabase";
 import { signOutUser } from "../app/lib/auth";
 import { getCurrentUserProfile } from "../app/lib/profile";
@@ -108,47 +109,49 @@ export default function Navbar() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-
-      setTimeout(async () => {
+    } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
         if (!mounted) return;
 
-        try {
-          if (session?.user) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email,
-            });
-            setLoading(false);
+        setTimeout(async () => {
+          if (!mounted) return;
 
-            const profile = await resolveProfileSafe();
+          try {
+            if (session?.user) {
+              setUser({
+                id: session.user.id,
+                email: session.user.email,
+              });
+              setLoading(false);
+
+              const profile = await resolveProfileSafe();
+
+              if (mounted) {
+                setUserPlan(profile.plan);
+                setSubscriptionStatus(profile.subscriptionStatus);
+                setCancelAtPeriodEnd(profile.cancelAtPeriodEnd);
+              }
+            } else {
+              setUser(null);
+              setUserPlan(null);
+              setSubscriptionStatus(null);
+              setCancelAtPeriodEnd(false);
+              setLoading(false);
+            }
+          } catch (error) {
+            console.error("Navbar auth state error:", error);
 
             if (mounted) {
-              setUserPlan(profile.plan);
-              setSubscriptionStatus(profile.subscriptionStatus);
-              setCancelAtPeriodEnd(profile.cancelAtPeriodEnd);
+              setUser(null);
+              setUserPlan("free");
+              setSubscriptionStatus(null);
+              setCancelAtPeriodEnd(false);
+              setLoading(false);
             }
-          } else {
-            setUser(null);
-            setUserPlan(null);
-            setSubscriptionStatus(null);
-            setCancelAtPeriodEnd(false);
-            setLoading(false);
           }
-        } catch (error) {
-          console.error("Navbar auth state error:", error);
-
-          if (mounted) {
-            setUser(null);
-            setUserPlan("free");
-            setSubscriptionStatus(null);
-            setCancelAtPeriodEnd(false);
-            setLoading(false);
-          }
-        }
-      }, 0);
-    });
+        }, 0);
+      }
+    );
 
     return () => {
       mounted = false;

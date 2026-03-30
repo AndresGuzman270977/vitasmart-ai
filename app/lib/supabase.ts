@@ -1,27 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const rawSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const rawSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!rawSupabaseUrl || !rawSupabaseAnonKey) {
   throw new Error("Missing Supabase environment variables");
 }
 
-// 🔥 SINGLETON GLOBAL (clave para evitar bugs)
-let supabaseInstance: ReturnType<typeof createClient> | null = null;
+const supabaseUrl: string = rawSupabaseUrl;
+const supabaseAnonKey: string = rawSupabaseAnonKey;
+
+let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null;
 
 export function getSupabaseClient() {
   if (supabaseInstance) {
     return supabaseInstance;
   }
 
-  supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      flowType: "pkce",
-    },
+  supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: {
         "X-Client-Info": "vita-smart-ai-web",
@@ -32,5 +28,4 @@ export function getSupabaseClient() {
   return supabaseInstance;
 }
 
-// 👉 Export opcional para compatibilidad (IMPORTANTE)
 export const supabase = getSupabaseClient();

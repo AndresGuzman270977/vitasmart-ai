@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import {
   getHistoryLimitLabel,
@@ -112,26 +113,28 @@ export default function HomePage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (ignore) return;
-
-      setTimeout(async () => {
+    } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
         if (ignore) return;
 
-        if (session?.user) {
-          setHasSession(true);
-          await loadProfileSafe(session.user.id);
-          setCheckingSession(false);
-          router.replace("/dashboard");
-        } else {
-          setHasSession(false);
-          setCurrentPlan("free");
-          setSubscriptionStatus(null);
-          setCancelAtPeriodEnd(false);
-          setCheckingSession(false);
-        }
-      }, 0);
-    });
+        setTimeout(async () => {
+          if (ignore) return;
+
+          if (session?.user) {
+            setHasSession(true);
+            await loadProfileSafe(session.user.id);
+            setCheckingSession(false);
+            router.replace("/dashboard");
+          } else {
+            setHasSession(false);
+            setCurrentPlan("free");
+            setSubscriptionStatus(null);
+            setCancelAtPeriodEnd(false);
+            setCheckingSession(false);
+          }
+        }, 0);
+      }
+    );
 
     return () => {
       ignore = true;
