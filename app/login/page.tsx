@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signInWithEmail, signUpWithEmail } from "../lib/auth";
@@ -8,6 +8,51 @@ import { supabase } from "../lib/supabase";
 import { ensureUserProfile } from "../lib/profile";
 
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-50 px-6 py-16">
+          <div className="mx-auto max-w-5xl">
+            <div className="grid gap-8 lg:grid-cols-2">
+              <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+                <div className="mb-4 inline-flex rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
+                  VitaSmart AI · Auth
+                </div>
+
+                <h1 className="text-3xl font-bold text-slate-900">
+                  Cargando acceso...
+                </h1>
+
+                <p className="mt-3 text-slate-600">
+                  Estamos preparando tu experiencia de inicio de sesión.
+                </p>
+              </section>
+
+              <section className="rounded-3xl bg-slate-900 p-8 text-white shadow-sm">
+                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+                  Lo que desbloqueas
+                </div>
+
+                <h2 className="mt-4 text-3xl font-bold">
+                  Una experiencia que crece contigo
+                </h2>
+
+                <p className="mt-4 leading-7 text-slate-300">
+                  Historial, IA avanzada, marketplace inteligente y una
+                  experiencia pensada para ayudarte a progresar con continuidad.
+                </p>
+              </section>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
