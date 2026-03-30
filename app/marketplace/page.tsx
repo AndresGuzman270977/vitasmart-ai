@@ -360,8 +360,7 @@ export default function MarketplacePage() {
         evidence === "all" ? true : item.evidenceLevel === evidence;
 
       const optionTiers = optionList.map((opt) => opt.product.budgetTier);
-      const matchesTier =
-        tier === "all" ? true : optionTiers.includes(tier);
+      const matchesTier = tier === "all" ? true : optionTiers.includes(tier);
 
       return matchesSearch && matchesCategory && matchesEvidence && matchesTier;
     });
@@ -549,7 +548,7 @@ export default function MarketplacePage() {
             />
             <StatCard
               title="Comparación"
-              value="3 tiers"
+              value="3 niveles"
               subtitle="Excelente, Muy buena y Buena"
             />
             <StatCard
@@ -633,7 +632,7 @@ export default function MarketplacePage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700">
-                Tier disponible
+                Nivel disponible
               </label>
               <select
                 value={tier}
@@ -730,7 +729,7 @@ export default function MarketplacePage() {
                         </h3>
 
                         <p className="mt-2 text-sm text-slate-600">
-                          Match score: <strong>{item.matchScore}/100</strong>
+                          Nivel de afinidad: <strong>{item.matchScore}/100</strong>
                         </p>
 
                         <div className="mt-5 rounded-xl bg-slate-50 p-4">
@@ -881,7 +880,7 @@ export default function MarketplacePage() {
                             </h3>
 
                             <p className="mt-1 text-sm text-slate-500">
-                              Score {item.matchScore}/100
+                              Nivel de afinidad {item.matchScore}/100
                             </p>
 
                             <div className="mt-4 rounded-xl bg-slate-50 p-4">

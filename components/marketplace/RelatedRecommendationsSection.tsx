@@ -23,11 +23,11 @@ export default function RelatedRecommendationsSection({
       <div className="flex items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            More related recommendations
+            Recomendaciones relacionadas
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Additional ingredients that may also be relevant based on your
-            current profile.
+            Ingredientes adicionales que también pueden ser relevantes según tu
+            perfil actual.
           </p>
         </div>
       </div>
@@ -44,7 +44,7 @@ export default function RelatedRecommendationsSection({
                   {item.ingredientName}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Match score {item.matchScore}/100
+                  Nivel de afinidad {item.matchScore}/100
                 </p>
               </div>
 
@@ -53,7 +53,7 @@ export default function RelatedRecommendationsSection({
 
             <p className="mt-3 text-sm leading-6 text-slate-700">
               {item.whyMatched?.[0] ||
-                "Relevant in the current support profile."}
+                "Relevante dentro de tu perfil actual de soporte."}
             </p>
 
             <div className="mt-4">
@@ -61,7 +61,7 @@ export default function RelatedRecommendationsSection({
                 href={`/marketplace?ingredient=${item.ingredientSlug}`}
                 className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               >
-                Compare this ingredient
+                Ver comparación de este ingrediente
               </Link>
             </div>
           </div>

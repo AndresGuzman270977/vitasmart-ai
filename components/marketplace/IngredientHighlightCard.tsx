@@ -21,7 +21,7 @@ const textByLocale = {
     primaryIngredient: "Ingrediente principal",
     prioritized:
       "Priorizado según tu perfil actual y tus necesidades de soporte dominantes.",
-    matchScore: "Match score",
+    matchScore: "Nivel de afinidad",
     whyItAppears: "Por qué aparece",
     evidenceSummary: "Resumen de evidencia",
     scientificContext: "Contexto científico",

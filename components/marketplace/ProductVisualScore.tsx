@@ -11,6 +11,11 @@ function getTone(value: number) {
   return "bg-slate-400";
 }
 
+function formatValue(value: number | null) {
+  if (value === null) return "No disponible";
+  return `${value}/100`;
+}
+
 export default function ProductVisualScore({
   label,
   value,
@@ -27,13 +32,15 @@ export default function ProductVisualScore({
           {label}
         </span>
         <span className="text-sm font-semibold text-slate-900">
-          {safeValue ?? "N/A"}
+          {formatValue(safeValue)}
         </span>
       </div>
 
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
         <div
-          className={`h-full rounded-full ${safeValue != null ? getTone(safeValue) : "bg-slate-200"}`}
+          className={`h-full rounded-full transition-all duration-500 ${
+            safeValue != null ? getTone(safeValue) : "bg-slate-200"
+          }`}
           style={{ width: `${safeValue ?? 0}%` }}
         />
       </div>

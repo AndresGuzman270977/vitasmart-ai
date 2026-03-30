@@ -137,8 +137,8 @@ export default function ProductDetailPage() {
     typeof params?.slug === "string"
       ? params.slug
       : Array.isArray(params?.slug)
-      ? params.slug[0]
-      : "";
+        ? params.slug[0]
+        : "";
 
   const analysis = getStoredAnalysis();
 
@@ -248,7 +248,7 @@ export default function ProductDetailPage() {
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Este producto aparece dentro del ecosistema VitaSmart AI como
                 una opción relevante dentro de un comparador estructurado por
-                ingrediente, evidencia, contexto de calidad y tier de
+                ingrediente, evidencia, contexto de calidad y nivel de
                 presupuesto.
               </p>
 
@@ -357,7 +357,7 @@ export default function ProductDetailPage() {
 
             <div className="mt-10 rounded-2xl border border-violet-200 bg-violet-50 p-6">
               <div className="text-sm font-semibold uppercase tracking-wide text-violet-900">
-                Por qué entra en este tier
+                Por qué entra en este nivel
               </div>
               <p className="mt-4 text-sm leading-7 text-violet-900">
                 {narratives.budgetReason}
@@ -389,14 +389,14 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-2">
-              <InfoCard label="Tier" value={translateTier(tier)} />
+              <InfoCard label="Nivel" value={translateTier(tier)} />
               <InfoCard label="Precio estimado" value={product.priceLabel} />
               <InfoCard label="Presentación" value={product.presentation} />
               <InfoCard label="Forma" value={translateForm(product.form)} />
               <InfoCard
                 label="Porciones"
                 value={
-                  product.servings != null ? String(product.servings) : "N/A"
+                  product.servings != null ? String(product.servings) : "No disponible"
                 }
               />
               <InfoCard
@@ -404,7 +404,7 @@ export default function ProductDetailPage() {
                 value={
                   product.estimatedCostPerDayUsd != null
                     ? `$${product.estimatedCostPerDayUsd.toFixed(2)}`
-                    : "N/A"
+                    : "No disponible"
                 }
               />
             </div>
@@ -492,10 +492,10 @@ export default function ProductDetailPage() {
                     ingredient.safetyDecision === "allow"
                       ? "bg-emerald-100 text-emerald-700"
                       : ingredient.safetyDecision === "allow_with_caution"
-                      ? "bg-amber-100 text-amber-700"
-                      : ingredient.safetyDecision === "high_caution"
-                      ? "bg-orange-100 text-orange-700"
-                      : "bg-rose-100 text-rose-700"
+                        ? "bg-amber-100 text-amber-700"
+                        : ingredient.safetyDecision === "high_caution"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-rose-100 text-rose-700"
                   }`}
                 >
                   {translateSafetyDecision(ingredient.safetyDecision)}
@@ -567,7 +567,7 @@ export default function ProductDetailPage() {
                 </h2>
                 <p className="mt-2 text-slate-600">
                   Compara otras alternativas para el mismo ingrediente en
-                  distintos tiers.
+                  distintos niveles.
                 </p>
               </div>
             </div>
@@ -632,7 +632,7 @@ export default function ProductDetailPage() {
                     </h3>
 
                     <p className="mt-2 text-sm text-slate-500">
-                      Match score {item.matchScore}/100
+                      Nivel de afinidad {item.matchScore}/100
                     </p>
 
                     <p className="mt-4 leading-7 text-slate-600">

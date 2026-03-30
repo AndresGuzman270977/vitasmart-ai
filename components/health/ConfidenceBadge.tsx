@@ -11,20 +11,20 @@ function getLevelStyles(level: ConfidenceBadgeProps["level"]) {
   switch (level) {
     case "high":
       return {
-        label: "High confidence",
+        label: "Alta confianza",
         className:
           "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "moderate":
       return {
-        label: "Moderate confidence",
+        label: "Confianza moderada",
         className:
           "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "limited":
     default:
       return {
-        label: "Limited confidence",
+        label: "Confianza limitada",
         className:
           "border-slate-200 bg-slate-100 text-slate-700",
       };

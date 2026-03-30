@@ -18,7 +18,7 @@ type ResultHeroProps = {
 function getScoreTone(score: number) {
   if (score >= 80) {
     return {
-      label: "Strong preventive profile",
+      label: "Perfil preventivo sólido",
       accent: "text-emerald-700",
       ring: "border-emerald-200 bg-emerald-50",
     };
@@ -26,14 +26,14 @@ function getScoreTone(score: number) {
 
   if (score >= 60) {
     return {
-      label: "Mixed profile with optimization opportunities",
+      label: "Perfil mixto con oportunidades de optimización",
       accent: "text-amber-700",
       ring: "border-amber-200 bg-amber-50",
     };
   }
 
   return {
-    label: "Priority preventive support suggested",
+    label: "Se recomienda soporte preventivo prioritario",
     accent: "text-rose-700",
     ring: "border-rose-200 bg-rose-50",
   };
@@ -74,7 +74,7 @@ export default function ResultHero({
 
             {advancedAI ? (
               <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">
-                Advanced AI
+                IA avanzada
               </span>
             ) : null}
           </div>
@@ -98,7 +98,7 @@ export default function ResultHero({
         <div className="flex flex-col gap-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
-              Preventive Health Interpretation
+              Interpretación preventiva de tu salud
             </h1>
             <p className="mt-3 text-base leading-7 text-slate-600">
               {executiveSummary}
@@ -107,7 +107,7 @@ export default function ResultHero({
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Clinical-style summary
+              Resumen en estilo clínico
             </h2>
             <p className="mt-3 text-sm leading-7 text-slate-700">
               {clinicalStyleSummary}
@@ -117,7 +117,7 @@ export default function ResultHero({
           {upgradeMessage ? (
             <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
               <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-violet-700">
-                Upgrade insight
+                Insight de mejora
               </h3>
               <p className="mt-2 text-sm leading-7 text-violet-800">
                 {upgradeMessage}

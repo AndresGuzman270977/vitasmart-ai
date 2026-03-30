@@ -582,7 +582,7 @@ function ResultsPageContent() {
       ) || [];
 
     const normalizedFromBackend = fromBackend.map((item, index) => ({
-      title: `Advanced recommendation ${index + 1}`,
+      title: `Recomendación avanzada ${index + 1}`,
       description: item,
     }));
 
@@ -970,7 +970,7 @@ function ResultsPageContent() {
 
                 <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                   <div className="text-sm font-semibold text-slate-900">
-                    Confidence level
+                    Nivel de confianza
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
                     {translateConfidenceLabel(
@@ -1171,14 +1171,15 @@ function ResultsPageContent() {
                 <p className="mt-3 text-slate-600">
                   El sistema priorizó{" "}
                   <strong>{topProductIngredient.ingredientName}</strong> como
-                  uno de los ingredientes con mayor afinidad para tu perfil actual.
+                  uno de los ingredientes con mayor afinidad para tu perfil
+                  actual.
                 </p>
 
                 <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
                   <div>
                     <div className="flex flex-wrap gap-2">
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                        Match score {topProductIngredient.matchScore}/100
+                        Nivel de afinidad {topProductIngredient.matchScore}/100
                       </span>
 
                       {topProductIngredient.evidenceLevel ? (
@@ -1186,8 +1187,8 @@ function ResultsPageContent() {
                           {topProductIngredient.evidenceLevel === "high"
                             ? "Evidencia alta"
                             : topProductIngredient.evidenceLevel === "moderate"
-                            ? "Evidencia moderada"
-                            : "Evidencia limitada"}
+                              ? "Evidencia moderada"
+                              : "Evidencia limitada"}
                         </span>
                       ) : null}
                     </div>
@@ -1221,9 +1222,9 @@ function ResultsPageContent() {
                 Qué significa este resultado para ti
               </h2>
               <p className="mt-3 text-slate-600">
-                El verdadero valor no está solo en ver un score, sino en usar este
-                resultado como referencia para construir hábitos más consistentes y
-                mejorar con continuidad.
+                El verdadero valor no está solo en ver un score, sino en usar
+                este resultado como referencia para construir hábitos más
+                consistentes y mejorar con continuidad.
               </p>
 
               <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -1282,8 +1283,8 @@ function ResultsPageContent() {
                           </h3>
                           <p className="mt-2 text-slate-600">
                             Actualiza tu plan para ver priorización completa,
-                            recomendaciones más profundas y una lectura mucho más
-                            accionable.
+                            recomendaciones más profundas y una lectura mucho
+                            más accionable.
                           </p>
                         </div>
 
@@ -1325,7 +1326,8 @@ function ResultsPageContent() {
                     No encontramos recomendaciones
                   </h2>
                   <p className="mt-2 text-slate-600">
-                    Completa correctamente el cuestionario para generar sugerencias.
+                    Completa correctamente el cuestionario para generar
+                    sugerencias.
                   </p>
                 </div>
               ) : (
@@ -1421,7 +1423,7 @@ function ProductRecommendationPreviewCard({
                     Costo diario estimado:{" "}
                     {product.product.estimatedCostPerDayUsd != null
                       ? `$${product.product.estimatedCostPerDayUsd.toFixed(2)}`
-                      : "N/A"}
+                      : "No disponible"}
                   </div>
 
                   <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
@@ -1499,15 +1501,15 @@ function PriorityBadge({ value }: { value: number }) {
     value >= 80
       ? "bg-red-100 text-red-700"
       : value >= 60
-      ? "bg-amber-100 text-amber-700"
-      : "bg-slate-100 text-slate-700";
+        ? "bg-amber-100 text-amber-700"
+        : "bg-slate-100 text-slate-700";
 
   const label =
     value >= 80
       ? "Prioridad alta"
       : value >= 60
-      ? "Prioridad media"
-      : "Prioridad base";
+        ? "Prioridad media"
+        : "Prioridad base";
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>
@@ -1545,8 +1547,8 @@ function TierBadge({
     value === "excellent"
       ? "Excelente"
       : value === "very_good"
-      ? "Muy buena"
-      : "Buena";
+        ? "Muy buena"
+        : "Buena";
 
   return (
     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">

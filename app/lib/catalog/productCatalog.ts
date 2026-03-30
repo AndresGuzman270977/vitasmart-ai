@@ -2,87 +2,8 @@
 
 import { ProductCatalogItem } from "./catalogTypes";
 
-function buildProductImageDataUrl(
-  brand: string,
-  productName: string,
-  tier: "excellent" | "very_good" | "good"
-): string {
-  const bg =
-    tier === "excellent"
-      ? "#EAF1FF"
-      : tier === "very_good"
-      ? "#F3F6FB"
-      : "#F8FAFC";
-
-  const accent =
-    tier === "excellent"
-      ? "#0F172A"
-      : tier === "very_good"
-      ? "#1E3A8A"
-      : "#334155";
-
-  const badge =
-    tier === "excellent"
-      ? "Excelente"
-      : tier === "very_good"
-      ? "Muy buena"
-      : "Buena";
-
-  const safeBrand = escapeXml(brand);
-  const safeProduct = escapeXml(productName);
-  const safeBadge = escapeXml(badge);
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
-      <rect width="1200" height="900" rx="36" fill="${bg}" />
-      <rect x="48" y="48" width="1104" height="804" rx="28" fill="#FFFFFF" stroke="#D9E2EC" />
-      <rect x="92" y="92" width="180" height="44" rx="22" fill="${accent}" opacity="0.08" />
-      <text x="182" y="120" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="${accent}">
-        ${safeBadge}
-      </text>
-      <rect x="92" y="180" width="360" height="460" rx="32" fill="${accent}" opacity="0.05" />
-      <rect x="170" y="250" width="210" height="300" rx="42" fill="#FFFFFF" stroke="${accent}" stroke-width="6" />
-      <rect x="200" y="210" width="150" height="60" rx="30" fill="#FFFFFF" stroke="${accent}" stroke-width="6" />
-      <circle cx="275" cy="380" r="58" fill="${accent}" opacity="0.10" />
-      <rect x="215" y="472" width="120" height="18" rx="9" fill="${accent}" opacity="0.18" />
-      <rect x="205" y="514" width="140" height="14" rx="7" fill="${accent}" opacity="0.12" />
-      <text x="520" y="270" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="${accent}">
-        ${safeBrand}
-      </text>
-      <text x="520" y="330" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="800" fill="#0F172A">
-        ${safeProduct}
-      </text>
-      <text x="520" y="410" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="500" fill="#475569">
-        VitaSmart AI · Vista de producto
-      </text>
-      <rect x="520" y="470" width="420" height="18" rx="9" fill="#E2E8F0" />
-      <rect x="520" y="510" width="360" height="18" rx="9" fill="#E2E8F0" />
-      <rect x="520" y="550" width="300" height="18" rx="9" fill="#E2E8F0" />
-      <rect x="520" y="640" width="170" height="44" rx="22" fill="${accent}" />
-      <text x="605" y="668" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF">
-        VitaSmart
-      </text>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-function productImage(
-  brand: string,
-  productName: string,
-  tier: "excellent" | "very_good" | "good"
-): string {
-  return buildProductImageDataUrl(brand, productName, tier);
+function productImage(slug: string): string {
+  return `/products/${slug}.webp`;
 }
 
 export const productCatalog: ProductCatalogItem[] = [
@@ -108,7 +29,7 @@ export const productCatalog: ProductCatalogItem[] = [
       "Fórmula limpia",
       "Perfil orientado a calidad profesional",
     ],
-    imageUrl: productImage("Thorne", "Magnesium Bisglycinate", "excellent"),
+    imageUrl: productImage("thorne-magnesium-bisglycinate"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -132,7 +53,7 @@ export const productCatalog: ProductCatalogItem[] = [
       "Muy buena relación costo-beneficio",
       "Amplia disponibilidad",
     ],
-    imageUrl: productImage("NOW", "Magnesium Glycinate", "very_good"),
+    imageUrl: productImage("now-magnesium-glycinate"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -153,11 +74,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 88,
     qualitySeals: ["GMP"],
     qualityNotes: ["Opción asequible de entrada"],
-    imageUrl: productImage(
-      "Doctor's Best",
-      "High Absorption Magnesium Glycinate",
-      "good"
-    ),
+    imageUrl: productImage("doctors-best-magnesium-glycinate"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -183,11 +100,7 @@ export const productCatalog: ProductCatalogItem[] = [
       "Marca con reputación fuerte",
       "Buena transparencia EPA/DHA",
     ],
-    imageUrl: productImage(
-      "Nordic Naturals",
-      "Ultimate Omega",
-      "excellent"
-    ),
+    imageUrl: productImage("nordic-naturals-ultimate-omega"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb", "direct"],
   },
@@ -208,7 +121,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 90,
     qualitySeals: ["GMP"],
     qualityNotes: ["Muy buen valor para soporte EPA/DHA"],
-    imageUrl: productImage("NOW", "Ultra Omega-3", "very_good"),
+    imageUrl: productImage("now-ultra-omega-3"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -229,11 +142,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 84,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Opción accesible con percepción de calidad aceptable"],
-    imageUrl: productImage(
-      "Sports Research",
-      "Omega-3 Fish Oil",
-      "good"
-    ),
+    imageUrl: productImage("sports-research-omega-3"),
     buyUrl: "#",
     availableMarkets: ["amazon"],
   },
@@ -256,7 +165,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 86,
     qualitySeals: ["NSF_173", "THIRD_PARTY_TESTED"],
     qualityNotes: ["Marca premium", "Formato líquido preciso"],
-    imageUrl: productImage("Thorne", "Vitamin D/K2 Liquid", "excellent"),
+    imageUrl: productImage("thorne-vitamin-d3"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -277,7 +186,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 95,
     qualitySeals: ["GMP"],
     qualityNotes: ["Muy alto valor", "Fórmula sencilla"],
-    imageUrl: productImage("NOW", "Vitamin D-3", "very_good"),
+    imageUrl: productImage("now-vitamin-d3"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -298,7 +207,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 92,
     qualitySeals: ["USP_VERIFIED"],
     qualityNotes: ["Muy accesible", "Alta conveniencia"],
-    imageUrl: productImage("Nature Made", "Vitamin D3", "good"),
+    imageUrl: productImage("nature-made-vitamin-d3"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -321,7 +230,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 78,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Posicionamiento premium de estilo clínico"],
-    imageUrl: productImage("Thorne", "Ashwagandha", "excellent"),
+    imageUrl: productImage("thorne-ashwagandha"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -342,7 +251,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 88,
     qualitySeals: ["GMP"],
     qualityNotes: ["Buena opción estandarizada por valor"],
-    imageUrl: productImage("NOW", "Ashwagandha Extract", "very_good"),
+    imageUrl: productImage("now-ashwagandha"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -363,7 +272,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 82,
     qualitySeals: ["GMP"],
     qualityNotes: ["Alternativa práctica y asequible"],
-    imageUrl: productImage("Youtheory", "Ashwagandha", "good"),
+    imageUrl: productImage("youtheory-ashwagandha"),
     buyUrl: "#",
     availableMarkets: ["amazon"],
   },
@@ -386,7 +295,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 80,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Fórmula premium", "Alta confianza de marca"],
-    imageUrl: productImage("Thorne", "CoQ10", "excellent"),
+    imageUrl: productImage("thorne-coq10"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -407,7 +316,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 90,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Muy buen valor y familiaridad de marca"],
-    imageUrl: productImage("Qunol", "Qunol CoQ10", "very_good"),
+    imageUrl: productImage("qunol-coq10"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -428,7 +337,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 88,
     qualitySeals: ["GMP"],
     qualityNotes: ["Opción económica"],
-    imageUrl: productImage("Doctor's Best", "CoQ10", "good"),
+    imageUrl: productImage("doctors-best-coq10"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -451,7 +360,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 80,
     qualitySeals: ["NSF_173"],
     qualityNotes: ["Alta calidad de formulación"],
-    imageUrl: productImage("Thorne", "Basic B-Complex", "excellent"),
+    imageUrl: productImage("thorne-basic-b-complex"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -472,7 +381,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 91,
     qualitySeals: ["GMP"],
     qualityNotes: ["Muy buen valor", "Fórmula simple"],
-    imageUrl: productImage("NOW", "B-Complex", "very_good"),
+    imageUrl: productImage("now-b-complex"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -493,7 +402,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 88,
     qualitySeals: ["USP_VERIFIED"],
     qualityNotes: ["Opción masiva y accesible"],
-    imageUrl: productImage("Nature Made", "Super B Complex", "good"),
+    imageUrl: productImage("nature-made-super-b-complex"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -516,7 +425,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 82,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Posicionamiento profesional"],
-    imageUrl: productImage("Thorne", "Melaton-3", "excellent"),
+    imageUrl: productImage("thorne-melaton-3"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -537,7 +446,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 90,
     qualitySeals: ["GMP"],
     qualityNotes: ["Amplia disponibilidad y practicidad"],
-    imageUrl: productImage("Natrol", "Melatonin", "very_good"),
+    imageUrl: productImage("natrol-melatonin"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -558,7 +467,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 89,
     qualitySeals: ["USP_VERIFIED"],
     qualityNotes: ["Entrada simple y accesible"],
-    imageUrl: productImage("Nature Made", "Melatonin", "good"),
+    imageUrl: productImage("nature-made-melatonin"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -581,7 +490,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 78,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Posicionamiento premium para calma y enfoque"],
-    imageUrl: productImage("Thorne", "Theanine", "excellent"),
+    imageUrl: productImage("thorne-theanine"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -602,7 +511,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 89,
     qualitySeals: ["GMP"],
     qualityNotes: ["Buen equilibrio entre costo y calidad"],
-    imageUrl: productImage("NOW", "L-Theanine", "very_good"),
+    imageUrl: productImage("now-l-theanine"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -623,7 +532,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 84,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Alternativa práctica de menor costo"],
-    imageUrl: productImage("Sports Research", "L-Theanine", "good"),
+    imageUrl: productImage("sports-research-l-theanine"),
     buyUrl: "#",
     availableMarkets: ["amazon"],
   },
@@ -646,7 +555,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 80,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Opción adaptógena premium"],
-    imageUrl: productImage("Thorne", "Rhodiola", "excellent"),
+    imageUrl: productImage("thorne-rhodiola"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -667,7 +576,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 87,
     qualitySeals: ["GMP"],
     qualityNotes: ["Muy buena opción intermedia"],
-    imageUrl: productImage("NOW", "Rhodiola", "very_good"),
+    imageUrl: productImage("now-rhodiola"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -688,7 +597,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 85,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Marca herbal reconocida"],
-    imageUrl: productImage("Gaia Herbs", "Rhodiola Rosea", "good"),
+    imageUrl: productImage("gaia-rhodiola"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -711,7 +620,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 78,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Formato premium de ingrediente único"],
-    imageUrl: productImage("Thorne", "Glycine", "excellent"),
+    imageUrl: productImage("thorne-glycine"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -732,7 +641,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 90,
     qualitySeals: ["GMP"],
     qualityNotes: ["Muy buen valor en formato polvo"],
-    imageUrl: productImage("NOW", "Glycine Powder", "very_good"),
+    imageUrl: productImage("now-glycine"),
     buyUrl: "#",
     availableMarkets: ["amazon", "iherb"],
   },
@@ -753,7 +662,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 86,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Opción económica en polvo"],
-    imageUrl: productImage("Bulk Supplements", "Glycine", "good"),
+    imageUrl: productImage("bulk-glycine"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -776,7 +685,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 72,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Opción premium reconocida en electrolitos"],
-    imageUrl: productImage("LMNT", "Electrolyte Drink Mix", "excellent"),
+    imageUrl: productImage("lmnt-electrolytes"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -797,7 +706,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 86,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Formato conveniente y posicionamiento accesible"],
-    imageUrl: productImage("Nuun", "Sport Electrolyte Tablets", "very_good"),
+    imageUrl: productImage("nuun-sport"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -820,7 +729,7 @@ export const productCatalog: ProductCatalogItem[] = [
     qualityNotes: [
       "Producto popular, pero conviene revisar bien su perfil de fórmula",
     ],
-    imageUrl: productImage("Liquid I.V.", "Hydration Multiplier", "good"),
+    imageUrl: productImage("liquid-iv-hydration"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -846,7 +755,7 @@ export const productCatalog: ProductCatalogItem[] = [
       "Posicionamiento premium de simbiótico",
       "Narrativa de marca muy fuerte",
     ],
-    imageUrl: productImage("Seed", "DS-01 Daily Synbiotic", "excellent"),
+    imageUrl: productImage("seed-ds-01"),
     buyUrl: "#",
     availableMarkets: ["direct"],
   },
@@ -867,11 +776,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 80,
     qualitySeals: ["THIRD_PARTY_TESTED"],
     qualityNotes: ["Marca reconocida en la categoría probiótica"],
-    imageUrl: productImage(
-      "Garden of Life",
-      "Dr. Formulated Probiotics",
-      "very_good"
-    ),
+    imageUrl: productImage("garden-of-life-probiotic"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },
@@ -892,11 +797,7 @@ export const productCatalog: ProductCatalogItem[] = [
     valueScore: 82,
     qualitySeals: ["NONE"],
     qualityNotes: ["Opción probiótica accesible"],
-    imageUrl: productImage(
-      "Culturelle",
-      "Digestive Daily Probiotic",
-      "good"
-    ),
+    imageUrl: productImage("culturelle-digestive-daily"),
     buyUrl: "#",
     availableMarkets: ["amazon", "direct"],
   },

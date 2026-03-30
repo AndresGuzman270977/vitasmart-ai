@@ -38,7 +38,7 @@ function ListCard({ title, items }: ListCardProps) {
         </div>
       ) : (
         <p className="mt-4 text-sm leading-6 text-slate-500">
-          No additional items highlighted in this section.
+          No se destacaron elementos adicionales en esta sección.
         </p>
       )}
     </div>
@@ -70,13 +70,14 @@ export default function ResultInsightsPanel({
           Insights
         </h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">
-          Structured interpretation of the strongest support signals in your current profile.
+          Interpretación estructurada de las señales de soporte más relevantes
+          dentro de tu perfil actual.
         </p>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
         <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Score narrative
+          Narrativa del score
         </h3>
         <p className="mt-3 text-sm leading-7 text-slate-700">
           {scoreNarrative}
@@ -84,16 +85,16 @@ export default function ResultInsightsPanel({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <ListCard title="Strengths" items={strengths} />
-        <ListCard title="Main drivers" items={mainDrivers} />
-        <ListCard title="Priority actions" items={priorityActions} />
-        <ListCard title="Risk signals" items={riskSignals} />
+        <ListCard title="Fortalezas" items={strengths} />
+        <ListCard title="Factores principales" items={mainDrivers} />
+        <ListCard title="Acciones prioritarias" items={priorityActions} />
+        <ListCard title="Señales de riesgo" items={riskSignals} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Dominant needs
+            Necesidades dominantes
           </h3>
           <div className="mt-4 flex flex-wrap gap-2">
             {dominantNeeds.length > 0 ? (
@@ -106,12 +107,14 @@ export default function ResultInsightsPanel({
                 </span>
               ))
             ) : (
-              <span className="text-sm text-slate-500">No dominant needs highlighted.</span>
+              <span className="text-sm text-slate-500">
+                No se destacaron necesidades dominantes.
+              </span>
             )}
           </div>
 
           <h4 className="mt-6 text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Secondary needs
+            Necesidades secundarias
           </h4>
           <div className="mt-4 flex flex-wrap gap-2">
             {secondaryNeeds.length > 0 ? (
@@ -124,13 +127,15 @@ export default function ResultInsightsPanel({
                 </span>
               ))
             ) : (
-              <span className="text-sm text-slate-500">No secondary needs highlighted.</span>
+              <span className="text-sm text-slate-500">
+                No se destacaron necesidades secundarias.
+              </span>
             )}
           </div>
         </div>
 
         <ListCard
-          title="Advanced recommendations"
+          title="Recomendaciones avanzadas"
           items={advancedRecommendations}
         />
       </div>

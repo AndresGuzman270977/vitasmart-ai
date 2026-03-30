@@ -13,7 +13,7 @@ const textByLocale = {
   es: {
     title: "Contexto de seguridad",
     restrictions: "Restricciones",
-    sideEffects: "Posibles efectos secundarios",
+    sideEffects: "Efectos secundarios potenciales",
     cautions: "Precauciones",
   },
   en: {

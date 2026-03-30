@@ -62,16 +62,16 @@ export default function ResultSubscoresGrid({
           Subscores
         </h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">
-          These subscores organize the current profile into key preventive support domains.
+          Estos subscores organizan tu perfil actual en dominios clave de soporte preventivo.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <SubscoreItem label="Sleep" value={sleepScore} />
-        <SubscoreItem label="Stress" value={stressScore} />
-        <SubscoreItem label="Energy" value={energyScore} />
-        <SubscoreItem label="Focus" value={focusScore} />
-        <SubscoreItem label="Metabolic" value={metabolicScore} />
+        <SubscoreItem label="Sueño" value={sleepScore} />
+        <SubscoreItem label="Estrés" value={stressScore} />
+        <SubscoreItem label="Energía" value={energyScore} />
+        <SubscoreItem label="Enfoque" value={focusScore} />
+        <SubscoreItem label="Metabólico" value={metabolicScore} />
       </div>
     </section>
   );
