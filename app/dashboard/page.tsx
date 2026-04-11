@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { signOutUser } from "../lib/auth";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import {
   getPlanLabel,
@@ -55,10 +57,13 @@ type TrendPoint = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [plan, setPlan] = useState<PlanType>("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [items, setItems] = useState<DashboardAssessmentRow[]>([]);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -162,6 +167,18 @@ export default function DashboardPage() {
     };
   }, []);
 
+  async function handleLogout() {
+    try {
+      setSigningOut(true);
+      await signOutUser();
+      router.replace("/login");
+    } catch (error) {
+      console.error("Error cerrando sesión desde dashboard:", error);
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   const latest = items[0] || null;
   const previous = items[1] || null;
 
@@ -261,7 +278,9 @@ export default function DashboardPage() {
     if (direct.length > 0) return direct;
 
     if (mainDrivers.length > 0) {
-      return mainDrivers.slice(0, 3).map((item) => `Priorizar mejora en: ${item}`);
+      return mainDrivers
+        .slice(0, 3)
+        .map((item) => `Priorizar mejora en: ${item}`);
     }
 
     return [];
@@ -274,8 +293,10 @@ export default function DashboardPage() {
     const fallback: string[] = [];
 
     if ((latest?.sleep_score ?? 0) >= 80) fallback.push("Buen soporte en sueño");
-    if ((latest?.energy_score ?? 0) >= 80) fallback.push("Buena base de energía");
-    if ((latest?.focus_score ?? 0) >= 80) fallback.push("Buen soporte de enfoque");
+    if ((latest?.energy_score ?? 0) >= 80)
+      fallback.push("Buena base de energía");
+    if ((latest?.focus_score ?? 0) >= 80)
+      fallback.push("Buen soporte de enfoque");
     if ((latest?.metabolic_score ?? 0) >= 80) {
       fallback.push("Base metabólica favorable");
     }
@@ -344,8 +365,40 @@ export default function DashboardPage() {
   const latestAiMode = normalizeAiMode(latest?.ai_mode);
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-16">
+    <main className="min-h-screen bg-slate-50 px-6 py-10">
       <div className="mx-auto max-w-7xl">
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+                Atajos del panel
+              </div>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+                Acceso rápido a las funciones principales
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Muévete más rápido entre tu evaluación, historial, marketplace,
+                planes y gestión de sesión.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <TopActionLink href="/quiz" label="Nuevo análisis" primary />
+              <TopActionLink href="/history" label="Historial" />
+              <TopActionLink href="/marketplace" label="Marketplace" />
+              <TopActionLink href="/pricing" label="Planes / Pricing" />
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={signingOut}
+                className="inline-flex rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                {signingOut ? "Cerrando..." : "Cerrar sesión"}
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
             VitaSmart AI · Dashboard
@@ -537,6 +590,11 @@ export default function DashboardPage() {
                       href="/history"
                       title="Ver historial"
                       description="Revisar evaluaciones previas guardadas."
+                    />
+                    <QuickLink
+                      href="/pricing"
+                      title="Gestionar plan"
+                      description="Revisar beneficios, límites y opciones de upgrade."
                     />
                   </div>
                 </div>
@@ -745,6 +803,29 @@ export default function DashboardPage() {
         )}
       </div>
     </main>
+  );
+}
+
+function TopActionLink({
+  href,
+  label,
+  primary = false,
+}: {
+  href: string;
+  label: string;
+  primary?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`inline-flex rounded-xl px-4 py-2 text-sm font-semibold transition ${
+        primary
+          ? "bg-slate-900 text-white hover:bg-slate-700"
+          : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -1023,38 +1104,23 @@ function buildClinicalFallback(item: DashboardAssessmentRow | null): string {
 
   const blocks: string[] = [];
 
-  if (
-    typeof item.sleep_score === "number" &&
-    item.sleep_score > 0
-  ) {
+  if (typeof item.sleep_score === "number" && item.sleep_score > 0) {
     blocks.push(`Sueño: ${item.sleep_score}/100`);
   }
 
-  if (
-    typeof item.stress_score === "number" &&
-    item.stress_score > 0
-  ) {
+  if (typeof item.stress_score === "number" && item.stress_score > 0) {
     blocks.push(`Estrés: ${item.stress_score}/100`);
   }
 
-  if (
-    typeof item.energy_score === "number" &&
-    item.energy_score > 0
-  ) {
+  if (typeof item.energy_score === "number" && item.energy_score > 0) {
     blocks.push(`Energía: ${item.energy_score}/100`);
   }
 
-  if (
-    typeof item.focus_score === "number" &&
-    item.focus_score > 0
-  ) {
+  if (typeof item.focus_score === "number" && item.focus_score > 0) {
     blocks.push(`Enfoque: ${item.focus_score}/100`);
   }
 
-  if (
-    typeof item.metabolic_score === "number" &&
-    item.metabolic_score > 0
-  ) {
+  if (typeof item.metabolic_score === "number" && item.metabolic_score > 0) {
     blocks.push(`Metabólico: ${item.metabolic_score}/100`);
   }
 
@@ -1065,7 +1131,9 @@ function buildClinicalFallback(item: DashboardAssessmentRow | null): string {
   )}.`;
 }
 
-function buildScoreNarrativeFallback(item: DashboardAssessmentRow | null): string {
+function buildScoreNarrativeFallback(
+  item: DashboardAssessmentRow | null
+): string {
   if (!item) return "";
 
   const score = resolveHealthScore(item);
