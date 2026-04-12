@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "../app/lib/supabase";
 import { signOutUser } from "../app/lib/auth";
-import { getCurrentUserProfile } from "../app/lib/profile";
+import { resolveViewerState } from "../app/lib/viewer";
 import {
   getPlanLabel,
   normalizePlan,
@@ -23,7 +24,25 @@ type NavbarProfile = {
   cancel_at_period_end?: boolean | null;
 };
 
+type ResolvedProfileState = {
+  plan: UserPlan;
+  subscriptionStatus: string | null;
+  cancelAtPeriodEnd: boolean;
+};
+
+const FALLBACK_PROFILE_STATE: ResolvedProfileState = {
+  plan: "free",
+  subscriptionStatus: null,
+  cancelAtPeriodEnd: false,
+};
+
 export default function Navbar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const authRefreshRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+
   const [user, setUser] = useState<NavbarUser | null>(null);
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
@@ -33,131 +52,158 @@ export default function Navbar() {
   const [loading, setLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const safeSetState = useCallback((fn: () => void) => {
+    if (!mountedRef.current) return;
+    fn();
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
 
-    async function resolveProfileSafe() {
-      try {
-        const profile = (await getCurrentUserProfile()) as NavbarProfile | null;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-        return {
-          plan: normalizePlan(profile?.plan),
-          subscriptionStatus: profile?.subscription_status ?? null,
-          cancelAtPeriodEnd: Boolean(profile?.cancel_at_period_end),
-        };
-      } catch (error) {
-        console.error("Navbar: no se pudo cargar el perfil del usuario:", error);
-        return {
-          plan: "free" as UserPlan,
-          subscriptionStatus: null,
-          cancelAtPeriodEnd: false,
-        };
-      }
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  const resolveProfileSafe = useCallback(async (): Promise<ResolvedProfileState> => {
+    try {
+      const viewer = await resolveViewerState();
+
+      const profile = (viewer.profile || null) as NavbarProfile | null;
+
+      return {
+        plan: normalizePlan(profile?.plan ?? viewer.plan),
+        subscriptionStatus: profile?.subscription_status ?? null,
+        cancelAtPeriodEnd: Boolean(profile?.cancel_at_period_end),
+      };
+    } catch (error) {
+      console.error("Navbar: no se pudo cargar el perfil del usuario:", error);
+      return FALLBACK_PROFILE_STATE;
     }
+  }, []);
 
-    async function loadUser() {
-      try {
-        const {
-          data: { user: currentUser },
-          error,
-        } = await supabase.auth.getUser();
+  const applyLoggedOutState = useCallback(() => {
+    safeSetState(() => {
+      setUser(null);
+      setUserPlan(null);
+      setSubscriptionStatus(null);
+      setCancelAtPeriodEnd(false);
+      setLoading(false);
+    });
+  }, [safeSetState]);
 
-        if (error) {
-          console.error("Navbar getUser error:", error);
-        }
+  const applyUserBaseState = useCallback(
+    (sessionUser: Session["user"]) => {
+      if (!sessionUser) return;
 
-        if (!mounted) return;
+      safeSetState(() => {
+        setUser({
+          id: sessionUser.id,
+          email: sessionUser.email,
+        });
+        setLoading(false);
+      });
+    },
+    [safeSetState]
+  );
 
-        if (currentUser) {
-          setUser({
-            id: currentUser.id,
-            email: currentUser.email,
-          });
+  const applyResolvedProfile = useCallback(async () => {
+    const profileState = await resolveProfileSafe();
 
-          setLoading(false);
+    safeSetState(() => {
+      setUserPlan(profileState.plan);
+      setSubscriptionStatus(profileState.subscriptionStatus);
+      setCancelAtPeriodEnd(profileState.cancelAtPeriodEnd);
+    });
+  }, [resolveProfileSafe, safeSetState]);
 
-          const profile = await resolveProfileSafe();
+  const bootstrap = useCallback(async () => {
+    try {
+      const {
+        data: { user: currentUser },
+        error,
+      } = await supabase.auth.getUser();
 
-          if (mounted) {
-            setUserPlan(profile.plan);
-            setSubscriptionStatus(profile.subscriptionStatus);
-            setCancelAtPeriodEnd(profile.cancelAtPeriodEnd);
-          }
-        } else {
-          setUser(null);
-          setUserPlan(null);
-          setSubscriptionStatus(null);
-          setCancelAtPeriodEnd(false);
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Navbar loadUser error:", error);
-
-        if (mounted) {
-          setUser(null);
-          setUserPlan(null);
-          setSubscriptionStatus(null);
-          setCancelAtPeriodEnd(false);
-          setLoading(false);
-        }
+      if (error) {
+        console.error("Navbar getUser error:", error);
       }
-    }
 
-    loadUser();
+      if (!mountedRef.current) return;
+
+      if (!currentUser) {
+        applyLoggedOutState();
+        return;
+      }
+
+      applyUserBaseState(currentUser);
+      await applyResolvedProfile();
+    } catch (error) {
+      console.error("Navbar bootstrap error:", error);
+      applyLoggedOutState();
+    }
+  }, [applyLoggedOutState, applyResolvedProfile, applyUserBaseState]);
+
+  useEffect(() => {
+    bootstrap();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
       (_event: AuthChangeEvent, session: Session | null) => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
 
-        setTimeout(async () => {
-          if (!mounted) return;
+        if (authRefreshRef.current) {
+          window.clearTimeout(authRefreshRef.current);
+        }
+
+        authRefreshRef.current = window.setTimeout(async () => {
+          if (!mountedRef.current) return;
 
           try {
-            if (session?.user) {
-              setUser({
-                id: session.user.id,
-                email: session.user.email,
-              });
-              setLoading(false);
-
-              const profile = await resolveProfileSafe();
-
-              if (mounted) {
-                setUserPlan(profile.plan);
-                setSubscriptionStatus(profile.subscriptionStatus);
-                setCancelAtPeriodEnd(profile.cancelAtPeriodEnd);
-              }
-            } else {
-              setUser(null);
-              setUserPlan(null);
-              setSubscriptionStatus(null);
-              setCancelAtPeriodEnd(false);
-              setLoading(false);
+            if (!session?.user) {
+              applyLoggedOutState();
+              return;
             }
+
+            applyUserBaseState(session.user);
+            await applyResolvedProfile();
           } catch (error) {
             console.error("Navbar auth state error:", error);
 
-            if (mounted) {
-              setUser(null);
+            if (!mountedRef.current) return;
+
+            safeSetState(() => {
+              setUser(
+                session?.user
+                  ? {
+                      id: session.user.id,
+                      email: session.user.email,
+                    }
+                  : null
+              );
               setUserPlan("free");
               setSubscriptionStatus(null);
               setCancelAtPeriodEnd(false);
               setLoading(false);
-            }
+            });
           }
         }, 0);
       }
     );
 
     return () => {
-      mounted = false;
+      if (authRefreshRef.current) {
+        window.clearTimeout(authRefreshRef.current);
+      }
+
       subscription.unsubscribe();
     };
-  }, []);
+  }, [applyLoggedOutState, applyResolvedProfile, applyUserBaseState, bootstrap, safeSetState]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -185,23 +231,31 @@ export default function Navbar() {
   async function handleLogout() {
     try {
       setSigningOut(true);
-      await signOutUser();
-      setUser(null);
-      setUserPlan(null);
-      setSubscriptionStatus(null);
-      setCancelAtPeriodEnd(false);
       setMenuOpen(false);
-      window.location.href = "/";
+
+      await signOutUser();
+
+      safeSetState(() => {
+        setUser(null);
+        setUserPlan(null);
+        setSubscriptionStatus(null);
+        setCancelAtPeriodEnd(false);
+      });
+
+      router.push("/");
+      router.refresh();
     } catch (error) {
       console.error("Error cerrando sesión:", error);
     } finally {
-      setSigningOut(false);
+      safeSetState(() => {
+        setSigningOut(false);
+      });
     }
   }
 
-  const userLabel = getUserLabel(user?.email);
+  const userLabel = useMemo(() => getUserLabel(user?.email), [user?.email]);
 
-  const subscriptionStatusLabel = (() => {
+  const subscriptionStatusLabel = useMemo(() => {
     if (!subscriptionStatus) return "Sin suscripción activa";
 
     if (subscriptionStatus === "active") {
@@ -219,24 +273,45 @@ export default function Navbar() {
     }
 
     return subscriptionStatus;
-  })();
+  }, [subscriptionStatus, cancelAtPeriodEnd]);
+
+  const planAccent =
+    userPlan === "premium"
+      ? "bg-violet-100 text-violet-700"
+      : userPlan === "pro"
+      ? "bg-sky-100 text-sky-700"
+      : "bg-slate-100 text-slate-700";
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between">
-        <Link
-          href="/"
-          className="text-lg font-bold tracking-tight text-slate-900"
-        >
-          VitaSmart AI
-        </Link>
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/"
+            className="text-lg font-bold tracking-tight text-slate-900"
+          >
+            VitaSmart AI
+          </Link>
+
+          {userPlan && (
+            <span
+              className={`hidden rounded-full px-3 py-1 text-[11px] font-semibold uppercase lg:inline-flex ${planAccent}`}
+            >
+              {getPlanLabel(userPlan)}
+            </span>
+          )}
+        </div>
 
         <nav className="flex flex-wrap items-center gap-2">
-          <NavLink href="/dashboard" label="Dashboard" />
-          <NavLink href="/quiz" label="Quiz" />
-          <NavLink href="/history" label="History" />
-          <NavLink href="/marketplace" label="Marketplace" />
-          <NavLink href="/pricing" label="Pricing" />
+          <NavLink href="/dashboard" label="Dashboard" currentPath={pathname} />
+          <NavLink href="/quiz" label="Quiz" currentPath={pathname} />
+          <NavLink href="/history" label="Historial" currentPath={pathname} />
+          <NavLink
+            href="/marketplace"
+            label="Marketplace"
+            currentPath={pathname}
+          />
+          <NavLink href="/pricing" label="Pricing" currentPath={pathname} />
 
           {loading ? (
             <div className="rounded-lg px-4 py-2 text-sm text-slate-500">
@@ -247,7 +322,9 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => setMenuOpen((prev) => !prev)}
-                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
                   {userLabel.initials}
@@ -263,7 +340,9 @@ export default function Navbar() {
                 </div>
 
                 {userPlan && (
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-700">
+                  <span
+                    className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${planAccent}`}
+                  >
                     {getPlanLabel(userPlan)}
                   </span>
                 )}
@@ -282,7 +361,9 @@ export default function Navbar() {
                     </div>
 
                     {userPlan && (
-                      <div className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase text-slate-700">
+                      <div
+                        className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${planAccent}`}
+                      >
                         Plan {getPlanLabel(userPlan)}
                       </div>
                     )}
@@ -385,11 +466,27 @@ export default function Navbar() {
   );
 }
 
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({
+  href,
+  label,
+  currentPath,
+}: {
+  href: string;
+  label: string;
+  currentPath: string;
+}) {
+  const active =
+    currentPath === href ||
+    (href !== "/" && currentPath.startsWith(`${href}/`));
+
   return (
     <Link
       href={href}
-      className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+      className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+        active
+          ? "bg-slate-900 text-white"
+          : "text-slate-700 hover:bg-slate-100"
+      }`}
     >
       {label}
     </Link>
@@ -422,10 +519,10 @@ function getUserLabel(email?: string) {
   }
 
   const local = email.split("@")[0];
-  const name = local.charAt(0).toUpperCase() + local.slice(1);
+  const safeLocal = local || "usuario";
 
   return {
-    name,
-    initials: local.substring(0, 2).toUpperCase(),
+    name: safeLocal.charAt(0).toUpperCase() + safeLocal.slice(1),
+    initials: safeLocal.substring(0, 2).toUpperCase(),
   };
 }

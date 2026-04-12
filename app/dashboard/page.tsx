@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import { signOutUser } from "../lib/auth";
-import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
+import { resolveViewerState } from "../lib/viewer";
 import {
   getPlanLabel,
   normalizePlan,
@@ -58,6 +58,7 @@ type TrendPoint = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const mountedRef = useRef(true);
 
   const [plan, setPlan] = useState<PlanType>("free");
   const [loading, setLoading] = useState(true);
@@ -66,47 +67,42 @@ export default function DashboardPage() {
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
-    let ignore = false;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    async function loadDashboard() {
-      try {
-        if (!ignore) {
-          setLoading(true);
-          setError("");
-        }
+  const safeSetState = useCallback((fn: () => void) => {
+    if (!mountedRef.current) return;
+    fn();
+  }, []);
 
-        let resolvedPlan: PlanType = "free";
+  const loadDashboard = useCallback(async () => {
+    try {
+      safeSetState(() => {
+        setLoading(true);
+        setError("");
+      });
 
-        try {
-          await ensureUserProfile();
-          const profile = await getCurrentUserProfile();
-          resolvedPlan = normalizePlan(profile?.plan);
-        } catch (err) {
-          console.error("No se pudo resolver el plan del dashboard:", err);
-        }
+      const viewer = await resolveViewerState();
+      const resolvedPlan = normalizePlan(viewer.plan);
 
-        if (!ignore) {
-          setPlan(resolvedPlan);
-        }
+      safeSetState(() => {
+        setPlan(resolvedPlan);
+      });
 
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+      if (viewer.needsLogin || !viewer.user) {
+        safeSetState(() => {
+          setItems([]);
+        });
+        return;
+      }
 
-        if (userError) throw userError;
-
-        if (!user) {
-          if (!ignore) {
-            setItems([]);
-          }
-          return;
-        }
-
-        const { data, error: queryError } = await supabase
-          .from("health_assessments")
-          .select(
-            `
+      const { data, error: queryError } = await supabase
+        .from("health_assessments")
+        .select(
+          `
             id,
             created_at,
             assessment_version,
@@ -136,46 +132,46 @@ export default function DashboardPage() {
             score,
             summary
           `
-          )
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(12);
+        )
+        .eq("user_id", viewer.user.id)
+        .order("created_at", { ascending: false })
+        .limit(12);
 
-        if (queryError) throw queryError;
+      if (queryError) throw queryError;
 
-        if (!ignore) {
-          setItems((data || []) as DashboardAssessmentRow[]);
-        }
-      } catch (err: any) {
-        console.error("Dashboard load error:", err);
+      safeSetState(() => {
+        setItems((data || []) as DashboardAssessmentRow[]);
+      });
+    } catch (err: any) {
+      console.error("Dashboard load error:", err);
 
-        if (!ignore) {
-          setError(err?.message || "No se pudo cargar el dashboard.");
-          setItems([]);
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
+      safeSetState(() => {
+        setError(err?.message || "No se pudo cargar el dashboard.");
+        setItems([]);
+      });
+    } finally {
+      safeSetState(() => {
+        setLoading(false);
+      });
     }
+  }, [safeSetState]);
 
+  useEffect(() => {
     loadDashboard();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  }, [loadDashboard]);
 
   async function handleLogout() {
     try {
       setSigningOut(true);
       await signOutUser();
       router.replace("/login");
+      router.refresh();
     } catch (error) {
       console.error("Error cerrando sesión desde dashboard:", error);
     } finally {
-      setSigningOut(false);
+      safeSetState(() => {
+        setSigningOut(false);
+      });
     }
   }
 
@@ -293,10 +289,12 @@ export default function DashboardPage() {
     const fallback: string[] = [];
 
     if ((latest?.sleep_score ?? 0) >= 80) fallback.push("Buen soporte en sueño");
-    if ((latest?.energy_score ?? 0) >= 80)
+    if ((latest?.energy_score ?? 0) >= 80) {
       fallback.push("Buena base de energía");
-    if ((latest?.focus_score ?? 0) >= 80)
+    }
+    if ((latest?.focus_score ?? 0) >= 80) {
       fallback.push("Buen soporte de enfoque");
+    }
     if ((latest?.metabolic_score ?? 0) >= 80) {
       fallback.push("Base metabólica favorable");
     }
@@ -363,6 +361,44 @@ export default function DashboardPage() {
 
   const latestPlan = normalizePlan(latest?.plan);
   const latestAiMode = normalizeAiMode(latest?.ai_mode);
+
+  const scoreTone = useMemo(() => {
+    if (latestScore >= 85) {
+      return {
+        title: "Base preventiva fuerte",
+        chip: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      };
+    }
+
+    if (latestScore >= 70) {
+      return {
+        title: "Buen punto de partida",
+        chip: "bg-amber-50 text-amber-700 border-amber-200",
+      };
+    }
+
+    if (latestScore >= 55) {
+      return {
+        title: "Oportunidad clara de mejora",
+        chip: "bg-orange-50 text-orange-700 border-orange-200",
+      };
+    }
+
+    return {
+      title: "Conviene actuar con más intención",
+      chip: "bg-rose-50 text-rose-700 border-rose-200",
+    };
+  }, [latestScore]);
+
+  const planMessage = useMemo(() => {
+    if (plan === "premium") {
+      return "Ya estás en la experiencia más completa de VitaSmart AI.";
+    }
+    if (plan === "pro") {
+      return "Tu plan actual ya desbloquea una experiencia más inteligente y útil.";
+    }
+    return "Tu plan actual te permite empezar. Pro y Premium desbloquean mayor profundidad y continuidad.";
+  }, [plan]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -435,6 +471,15 @@ export default function DashboardPage() {
             del último análisis y una vista rápida de evolución para ayudarte a
             actuar con más claridad, continuidad y mejor criterio preventivo.
           </p>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">
+              Estado actual de tu experiencia
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {planMessage}
+            </p>
+          </div>
 
           <div className="mt-8 grid gap-4 md:grid-cols-5">
             <StatCard
@@ -512,7 +557,7 @@ export default function DashboardPage() {
           </section>
         ) : (
           <>
-            <section className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <section className="mt-8 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
               <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge>{formatDate(latest.created_at)}</Badge>
@@ -521,31 +566,36 @@ export default function DashboardPage() {
                     {latestAiMode === "advanced" ? "IA avanzada" : "IA base"}
                   </Badge>
                   <ConfidencePill level={latestConfidence} />
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${scoreTone.chip}`}
+                  >
+                    {scoreTone.title}
+                  </span>
                   {latest.assessment_version ? (
                     <Badge>{latest.assessment_version}</Badge>
                   ) : null}
                 </div>
 
-                <div className="mt-6 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_220px]">
                   <div>
-                    <h2 className="text-3xl font-semibold tracking-tight text-slate-900">
+                    <h2 className="text-4xl font-bold tracking-tight text-slate-900">
                       Health Score {latestScore}/100
                     </h2>
-                    <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700">
+                    <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-700">
                       {latestSummary}
                     </p>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-slate-50 px-6 py-5 text-center">
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 px-6 py-6 text-center">
                     <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                       Confianza
                     </div>
                     <div className="mt-2 text-2xl font-bold text-slate-900">
                       {translateConfidence(latestConfidence)}
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">
+                    <div className="mt-3 text-xs leading-5 text-slate-500">
                       {latest.confidence_explanation?.trim()
-                        ? "Explicación disponible"
+                        ? latest.confidence_explanation
                         : "Explicación no registrada"}
                     </div>
                   </div>
@@ -632,6 +682,28 @@ export default function DashboardPage() {
                     />
                   </div>
                 </div>
+
+                {plan !== "premium" && (
+                  <div className="rounded-3xl border border-violet-200 bg-violet-50 p-8 shadow-sm">
+                    <h2 className="text-xl font-semibold tracking-tight text-violet-900">
+                      Siguiente salto recomendado
+                    </h2>
+                    <p className="mt-3 text-sm leading-7 text-violet-800">
+                      {plan === "free"
+                        ? "Pasa a Pro o Premium para desbloquear una experiencia más útil, con mayor profundidad, mejores recomendaciones y más continuidad."
+                        : "Premium te da la capa más completa y refinada de VitaSmart AI para análisis, continuidad y marketplace."}
+                    </p>
+
+                    <div className="mt-5">
+                      <Link
+                        href="/pricing"
+                        className="inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        Ver opciones de upgrade
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -698,23 +770,23 @@ export default function DashboardPage() {
               ) : (
                 <>
                   <div className="mt-8">
-                    <div className="flex items-end gap-3 overflow-x-auto pb-2">
+                    <div className="flex items-end gap-4 overflow-x-auto pb-2">
                       {trend.map((point) => (
                         <div
                           key={point.id}
-                          className="flex min-w-[84px] flex-col items-center"
+                          className="flex min-w-[90px] flex-col items-center"
                         >
                           <div className="mb-2 text-xs font-semibold text-slate-500">
                             {point.score}
                           </div>
-                          <div className="flex h-52 items-end">
+                          <div className="flex h-56 items-end">
                             <div
                               className={`w-12 rounded-t-2xl ${
                                 point.score >= 80
                                   ? "bg-emerald-500"
                                   : point.score >= 60
-                                  ? "bg-amber-500"
-                                  : "bg-rose-500"
+                                    ? "bg-amber-500"
+                                    : "bg-rose-500"
                               }`}
                               style={{ height: `${Math.max(point.score, 6)}%` }}
                             />
@@ -888,14 +960,25 @@ function MiniScoreCard({
 }) {
   const score = typeof value === "number" ? value : null;
 
+  const status =
+    score == null
+      ? "Sin dato"
+      : score >= 80
+        ? "Favorable"
+        : score >= 60
+          ? "Intermedio"
+          : "Bajo";
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-slate-600">{label}</span>
         <span className="text-sm font-semibold text-slate-900">
-          {score ?? "No disponible"}
+          {score ?? "—"}
         </span>
       </div>
+
+      <div className="mt-2 text-xs text-slate-500">{status}</div>
 
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
         <div
@@ -903,10 +986,10 @@ function MiniScoreCard({
             score == null
               ? "bg-slate-200"
               : score >= 80
-              ? "bg-emerald-500"
-              : score >= 60
-              ? "bg-amber-500"
-              : "bg-rose-500"
+                ? "bg-emerald-500"
+                : score >= 60
+                  ? "bg-amber-500"
+                  : "bg-rose-500"
           }`}
           style={{ width: `${score ?? 0}%` }}
         />
@@ -997,8 +1080,8 @@ function ConfidencePill({
     level === "high"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
       : level === "moderate"
-      ? "border-amber-200 bg-amber-50 text-amber-700"
-      : "border-slate-200 bg-slate-100 text-slate-700";
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-100 text-slate-700";
 
   return (
     <span
@@ -1087,10 +1170,10 @@ function buildGenericExecutiveSummary(
     score >= 80
       ? "muestra una base preventiva sólida"
       : score >= 60
-      ? "muestra una base razonable con espacio de mejora"
-      : score > 0
-      ? "muestra una oportunidad clara de intervención y seguimiento"
-      : "requiere una lectura más completa";
+        ? "muestra una base razonable con espacio de mejora"
+        : score > 0
+          ? "muestra una oportunidad clara de intervención y seguimiento"
+          : "requiere una lectura más completa";
 
   if (goal !== "-") {
     return `Tu último resultado ${scoreText}. Conviene interpretar este momento en relación con tu objetivo principal: ${goal.toLowerCase()}.`;

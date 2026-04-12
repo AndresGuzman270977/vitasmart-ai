@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { saveAssessment, type AssessmentAiMode } from "../lib/saveAssessment";
+import { resolveViewerState } from "../lib/viewer";
 import {
   getPlanLimits,
   normalizePlan,
@@ -178,6 +185,13 @@ type LockedPreviewItem = {
   description: string;
 };
 
+type BootstrapData = {
+  resolvedPlan: PlanType;
+  parsedDraft: QuizDraft;
+  draftSignature: string;
+  hasLoggedUser: boolean;
+};
+
 const QUIZ_STORAGE_KEY = "vitaSmartQuizDraft";
 const LAST_ANALYSIS_CACHE_KEY = "vitaSmartLastHealthAnalysis";
 
@@ -224,126 +238,404 @@ function ResultsPageContent() {
 
   const [draft, setDraft] = useState<QuizDraft | null>(null);
 
+  const mountedRef = useRef(true);
+  const lastSavedSignatureRef = useRef<string | null>(null);
+
   useEffect(() => {
-    let ignore = false;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    async function loadPlanAndAnalysis() {
+  const safeSetState = useCallback((fn: () => void) => {
+    if (!mountedRef.current) return;
+    fn();
+  }, []);
+
+  const buildDraftSignature = useCallback((draftValue: QuizDraft) => {
+    return JSON.stringify({
+      requestedAiMode: draftValue?.requestedAiMode ?? "advanced",
+      plan: draftValue?.plan ?? "free",
+      assessment: draftValue?.assessment ?? {},
+      biomarkers: draftValue?.biomarkers ?? {},
+    });
+  }, []);
+
+  const resetUiForReload = useCallback(() => {
+    safeSetState(() => {
+      setPlanLoading(true);
+      setLoadingAnalysis(true);
+      setAnalysisError("");
+      setSaveNotice("");
+      setAnalysis(null);
+      setUpgradeRequired(false);
+      setUpgradeMessage("");
+      setWasDowngraded(false);
+      setRequestedAiMode("advanced");
+      setAppliedAiMode("basic");
+    });
+  }, [safeSetState]);
+
+  const loadDraftFromSession = useCallback((): QuizDraft => {
+    if (typeof window === "undefined") {
+      throw new Error(
+        "No encontramos un análisis reciente en sesión. Por favor completa nuevamente el cuestionario."
+      );
+    }
+
+    const rawDraft = sessionStorage.getItem(QUIZ_STORAGE_KEY);
+
+    if (!rawDraft) {
+      throw new Error(
+        "No encontramos un análisis reciente en sesión. Por favor completa nuevamente el cuestionario."
+      );
+    }
+
+    let parsedDraft: QuizDraft;
+
+    try {
+      parsedDraft = JSON.parse(rawDraft) as QuizDraft;
+    } catch {
+      throw new Error(
+        "El borrador del cuestionario no es válido. Por favor vuelve a realizar el análisis."
+      );
+    }
+
+    if (!parsedDraft?.assessment) {
+      throw new Error(
+        "El borrador del cuestionario está incompleto. Por favor vuelve a realizar el análisis."
+      );
+    }
+
+    return parsedDraft;
+  }, []);
+
+  const isValidAnalysisResponse = useCallback(
+    (value: unknown): value is HealthAnalysisResponse => {
+      const candidate = value as Partial<HealthAnalysisResponse> | null;
+
+      return Boolean(
+        candidate &&
+          typeof candidate === "object" &&
+          candidate.assessmentVersion &&
+          candidate.scores &&
+          typeof candidate.scores.healthScore === "number" &&
+          candidate.summaries &&
+          typeof candidate.summaries.executiveSummary === "string" &&
+          Array.isArray(candidate.insights?.mainDrivers) &&
+          Array.isArray(candidate.userNeeds?.dominantNeeds)
+      );
+    },
+    []
+  );
+
+  const getCachedAnalysis = useCallback(
+    (draftSignature: string): HealthAnalysisResponse | null => {
+      if (typeof window === "undefined") return null;
+
+      const raw = sessionStorage.getItem(LAST_ANALYSIS_CACHE_KEY);
+      if (!raw) return null;
+
       try {
-        if (!ignore) {
-          setPlanLoading(true);
-          setLoadingAnalysis(true);
-          setAnalysisError("");
-          setSaveNotice("");
-          setAnalysis(null);
-          setUpgradeRequired(false);
-          setUpgradeMessage("");
-          setWasDowngraded(false);
-          setRequestedAiMode("advanced");
-          setAppliedAiMode("basic");
-        }
-
-        let resolvedPlan: PlanType = "free";
-
-        try {
-          await ensureUserProfile();
-          const profile = await getCurrentUserProfile();
-          resolvedPlan = normalizePlan(profile?.plan);
-        } catch (error) {
-          console.error("No se pudo resolver el plan del usuario:", error);
-          resolvedPlan = "free";
-        }
-
-        if (!ignore) {
-          setPlan(resolvedPlan);
-        }
-
-        const rawDraft =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem(QUIZ_STORAGE_KEY)
-            : null;
-
-        if (!rawDraft) {
-          throw new Error(
-            "No encontramos un análisis reciente en sesión. Por favor completa nuevamente el cuestionario."
-          );
-        }
-
-        const parsedDraft = JSON.parse(rawDraft) as QuizDraft;
-
-        if (!parsedDraft?.assessment) {
-          throw new Error(
-            "El borrador del cuestionario está incompleto. Por favor vuelve a realizar el análisis."
-          );
-        }
-
-        if (!ignore) {
-          setDraft(parsedDraft);
-        }
-
-        const payload = {
-          plan: parsedDraft.plan ?? resolvedPlan,
-          requestedAiMode: parsedDraft.requestedAiMode ?? "advanced",
-          assessment: parsedDraft.assessment,
-          biomarkers: parsedDraft.biomarkers,
+        const parsed = JSON.parse(raw) as {
+          draftSignature?: string;
+          result?: HealthAnalysisResponse;
         };
 
-        let result: HealthAnalysisResponse | null = null;
-
-        const cachedAnalysis =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem(LAST_ANALYSIS_CACHE_KEY)
-            : null;
-
-        if (cachedAnalysis) {
-          try {
-            const parsedCached = JSON.parse(
-              cachedAnalysis
-            ) as HealthAnalysisResponse;
-
-            if (
-              parsedCached?.assessmentVersion &&
-              parsedCached?.scores?.healthScore != null
-            ) {
-              result = parsedCached;
-            }
-          } catch {
-            result = null;
-          }
+        if (
+          parsed?.draftSignature === draftSignature &&
+          isValidAnalysisResponse(parsed?.result)
+        ) {
+          return parsed.result;
         }
 
+        if (isValidAnalysisResponse(parsed as unknown)) {
+          return parsed as unknown as HealthAnalysisResponse;
+        }
+
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    [isValidAnalysisResponse]
+  );
+
+  const setCachedAnalysis = useCallback(
+    (draftSignature: string, result: HealthAnalysisResponse) => {
+      if (typeof window === "undefined") return;
+
+      sessionStorage.setItem(
+        LAST_ANALYSIS_CACHE_KEY,
+        JSON.stringify({
+          draftSignature,
+          result,
+        })
+      );
+    },
+    []
+  );
+
+  const requestAnalysis = useCallback(
+    async (
+      resolvedPlan: PlanType,
+      parsedDraft: QuizDraft
+    ): Promise<HealthAnalysisResponse> => {
+      const payload = {
+        plan: parsedDraft.plan ?? resolvedPlan,
+        requestedAiMode: parsedDraft.requestedAiMode ?? "advanced",
+        assessment: parsedDraft.assessment,
+        biomarkers: parsedDraft.biomarkers,
+      };
+
+      const response = await fetch("/api/health-analysis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json()) as
+        | HealthAnalysisResponse
+        | { error?: string; fieldErrors?: string[] };
+
+      if (!response.ok) {
+        throw new Error(
+          (data as { error?: string }).error || "No se pudo generar el análisis."
+        );
+      }
+
+      return data as HealthAnalysisResponse;
+    },
+    []
+  );
+
+  const bootstrap = useCallback(async (): Promise<BootstrapData> => {
+    const [viewer, parsedDraft] = await Promise.all([
+      resolveViewerState(),
+      Promise.resolve(loadDraftFromSession()),
+    ]);
+
+    const resolvedPlan = normalizePlan(
+      parsedDraft.plan ?? viewer.plan ?? "free"
+    );
+    const draftSignature = buildDraftSignature(parsedDraft);
+
+    safeSetState(() => {
+      setPlan(resolvedPlan);
+      setDraft(parsedDraft);
+    });
+
+    return {
+      resolvedPlan,
+      parsedDraft,
+      draftSignature,
+      hasLoggedUser: !viewer.needsLogin && Boolean(viewer.user),
+    };
+  }, [buildDraftSignature, loadDraftFromSession, safeSetState]);
+
+  const persistAnalysis = useCallback(
+    async (
+      result: HealthAnalysisResponse,
+      parsedDraft: QuizDraft,
+      backendPlan: PlanType,
+      draftSignature: string,
+      hasLoggedUser: boolean
+    ) => {
+      if (result.persistence?.saved) {
+        safeSetState(() => {
+          setSaveNotice(
+            result.appliedAiMode === "advanced"
+              ? "Análisis avanzado guardado correctamente en tu historial."
+              : "Análisis base guardado correctamente en tu historial."
+          );
+        });
+        lastSavedSignatureRef.current = draftSignature;
+        return;
+      }
+
+      const saveSignature = `${draftSignature}::${result.assessmentVersion}::${result.appliedAiMode}`;
+
+      if (lastSavedSignatureRef.current === saveSignature) {
+        return;
+      }
+
+      const assessment = parsedDraft.assessment;
+      const biomarkers = parsedDraft.biomarkers;
+
+      const bmi =
+        typeof assessment.weightKg === "number" &&
+        typeof assessment.heightCm === "number" &&
+        assessment.heightCm > 0
+          ? Number(
+              (
+                assessment.weightKg /
+                Math.pow(assessment.heightCm / 100, 2)
+              ).toFixed(1)
+            )
+          : null;
+
+      try {
+        const aiMode: AssessmentAiMode =
+          result.appliedAiMode === "advanced" ? "advanced" : "basic";
+
+        const saveResult = await saveAssessment(
+          {
+            assessmentVersion: result.assessmentVersion,
+            plan: backendPlan,
+            aiMode,
+            generatedBy: "results-page-v4",
+
+            age: assessment.age,
+            sex: assessment.sex,
+
+            weightKg: assessment.weightKg ?? null,
+            heightCm: assessment.heightCm ?? null,
+            waistCm: assessment.waistCm ?? null,
+            bmi,
+
+            stressLevel: assessment.stressLevel ?? null,
+            sleepHours: assessment.sleepHours ?? null,
+            sleepQuality: assessment.sleepQuality ?? null,
+            fatigueLevel: assessment.fatigueLevel ?? null,
+            focusDifficulty: assessment.focusDifficulty ?? null,
+
+            physicalActivity: assessment.physicalActivity ?? null,
+            alcoholUse: assessment.alcoholUse ?? null,
+            smokingStatus: assessment.smokingStatus ?? null,
+            sunExposure: assessment.sunExposure ?? null,
+            hydrationLevel: assessment.hydrationLevel ?? null,
+            ultraProcessedFoodLevel:
+              assessment.ultraProcessedFoodLevel ?? null,
+
+            bloodPressureKnown: Boolean(assessment.bloodPressureKnown),
+            systolicBp: assessment.systolicBp ?? null,
+            diastolicBp: assessment.diastolicBp ?? null,
+
+            mainGoal: assessment.mainGoal,
+
+            baseConditions: assessment.baseConditions ?? [],
+            currentMedications: assessment.currentMedications ?? [],
+            currentSupplements: assessment.currentSupplements ?? [],
+
+            healthScore: result.scores.healthScore,
+            sleepScore: result.scores.sleepScore,
+            stressScore: result.scores.stressScore,
+            energyScore: result.scores.energyScore,
+            focusScore: result.scores.focusScore,
+            metabolicScore: result.scores.metabolicScore,
+
+            confidenceLevel: result.confidence.confidenceLevel,
+            confidenceExplanation: result.confidence.confidenceExplanation,
+
+            executiveSummary: result.summaries.executiveSummary,
+            clinicalStyleSummary: result.summaries.clinicalStyleSummary,
+            scoreNarrative: result.summaries.scoreNarrative,
+            professionalFollowUpAdvice:
+              result.summaries.professionalFollowUpAdvice,
+
+            strengths: result.insights.strengths,
+            mainDrivers: result.insights.mainDrivers,
+            priorityActions: result.insights.priorityActions,
+            riskSignals: result.insights.riskSignals,
+            factors: [
+              ...result.insights.mainDrivers,
+              ...result.userNeeds.dominantNeeds.map(humanizeNeed),
+            ].slice(0, 8),
+
+            biomarkers: biomarkers
+              ? {
+                  fasting_glucose: biomarkers.fasting_glucose ?? null,
+                  hba1c: biomarkers.hba1c ?? null,
+                  total_cholesterol: biomarkers.total_cholesterol ?? null,
+                  hdl: biomarkers.hdl ?? null,
+                  ldl: biomarkers.ldl ?? null,
+                  triglycerides: biomarkers.triglycerides ?? null,
+                  vitamin_d: biomarkers.vitamin_d ?? null,
+                  b12: biomarkers.b12 ?? null,
+                  ferritin: biomarkers.ferritin ?? null,
+                  tsh: biomarkers.tsh ?? null,
+                  creatinine: biomarkers.creatinine ?? null,
+                  ast: biomarkers.ast ?? null,
+                  alt: biomarkers.alt ?? null,
+                  lab_date: biomarkers.lab_date ?? null,
+                }
+              : undefined,
+          },
+          {
+            aiMode,
+            generatedBy: "results-page-v4",
+          }
+        );
+
+        lastSavedSignatureRef.current = saveSignature;
+
+        safeSetState(() => {
+          if (saveResult.saved) {
+            setSaveNotice(
+              result.appliedAiMode === "advanced"
+                ? "Análisis avanzado guardado correctamente en tu historial."
+                : "Análisis base guardado correctamente en tu historial."
+            );
+          } else if (!saveResult.saved && saveResult.reason === "no-user") {
+            setSaveNotice(
+              "Análisis generado. Inicia sesión para guardar este resultado en tu historial."
+            );
+          } else if (!saveResult.saved && saveResult.reason === "plan-limit") {
+            setSaveNotice(
+              `Has alcanzado el límite de análisis guardados de tu plan ${String(
+                saveResult.plan || "actual"
+              ).toUpperCase()}. Actualiza tu plan para seguir guardando resultados.`
+            );
+          } else if (!hasLoggedUser) {
+            setSaveNotice(
+              "Análisis generado. Inicia sesión para guardar este resultado en tu historial."
+            );
+          } else {
+            setSaveNotice(
+              "El análisis se generó, pero no se pudo guardar en tu historial."
+            );
+          }
+        });
+      } catch (saveError: any) {
+        console.error("Error guardando análisis expandido:", saveError);
+
+        safeSetState(() => {
+          setSaveNotice(
+            saveError?.message ||
+              "El análisis se generó, pero no se pudo guardar en tu historial."
+          );
+        });
+      }
+    },
+    [safeSetState]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPlanAndAnalysis() {
+      resetUiForReload();
+
+      try {
+        const { resolvedPlan, parsedDraft, draftSignature, hasLoggedUser } =
+          await bootstrap();
+
+        if (cancelled || !mountedRef.current) return;
+
+        let result = getCachedAnalysis(draftSignature);
+
         if (!result) {
-          const response = await fetch("/api/health-analysis", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-
-          const data = (await response.json()) as
-            | HealthAnalysisResponse
-            | { error?: string; fieldErrors?: string[] };
-
-          if (!response.ok) {
-            throw new Error(
-              (data as { error?: string }).error ||
-                "No se pudo generar el análisis."
-            );
-          }
-
-          result = data as HealthAnalysisResponse;
-
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem(
-              LAST_ANALYSIS_CACHE_KEY,
-              JSON.stringify(result)
-            );
-          }
+          result = await requestAnalysis(resolvedPlan, parsedDraft);
+          if (cancelled || !mountedRef.current) return;
+          setCachedAnalysis(draftSignature, result);
         }
 
         const backendPlan = normalizePlan(result.plan || resolvedPlan);
 
-        if (!ignore) {
+        safeSetState(() => {
           setPlan(backendPlan);
           setAnalysis(result);
           setRequestedAiMode(result.requestedAiMode || "advanced");
@@ -351,181 +643,46 @@ function ResultsPageContent() {
           setUpgradeRequired(Boolean(result.upgradeRequired));
           setUpgradeMessage(result.upgradeMessage || "");
           setWasDowngraded(Boolean(result.wasDowngraded));
-        }
+        });
 
-        if (result.persistence?.saved) {
-          if (!ignore) {
-            setSaveNotice(
-              result.appliedAiMode === "advanced"
-                ? "Análisis avanzado guardado correctamente en tu historial."
-                : "Análisis base guardado correctamente en tu historial."
-            );
-          }
-          return;
-        }
-
-        try {
-          const assessment = parsedDraft.assessment;
-          const biomarkers = parsedDraft.biomarkers;
-
-          const bmi =
-            typeof assessment.weightKg === "number" &&
-            typeof assessment.heightCm === "number" &&
-            assessment.heightCm > 0
-              ? Number(
-                  (
-                    assessment.weightKg /
-                    Math.pow(assessment.heightCm / 100, 2)
-                  ).toFixed(1)
-                )
-              : null;
-
-          const saveResult = await saveAssessment(
-            {
-              assessmentVersion: result.assessmentVersion,
-              plan: backendPlan,
-              aiMode:
-                result.appliedAiMode === "advanced" ? "advanced" : "basic",
-              generatedBy: "results-page-v2",
-
-              age: assessment.age,
-              sex: assessment.sex,
-
-              weightKg: assessment.weightKg ?? null,
-              heightCm: assessment.heightCm ?? null,
-              waistCm: assessment.waistCm ?? null,
-              bmi,
-
-              stressLevel: assessment.stressLevel ?? null,
-              sleepHours: assessment.sleepHours ?? null,
-              sleepQuality: assessment.sleepQuality ?? null,
-              fatigueLevel: assessment.fatigueLevel ?? null,
-              focusDifficulty: assessment.focusDifficulty ?? null,
-
-              physicalActivity: assessment.physicalActivity ?? null,
-              alcoholUse: assessment.alcoholUse ?? null,
-              smokingStatus: assessment.smokingStatus ?? null,
-              sunExposure: assessment.sunExposure ?? null,
-              hydrationLevel: assessment.hydrationLevel ?? null,
-              ultraProcessedFoodLevel:
-                assessment.ultraProcessedFoodLevel ?? null,
-
-              bloodPressureKnown: Boolean(assessment.bloodPressureKnown),
-              systolicBp: assessment.systolicBp ?? null,
-              diastolicBp: assessment.diastolicBp ?? null,
-
-              mainGoal: assessment.mainGoal,
-
-              baseConditions: assessment.baseConditions ?? [],
-              currentMedications: assessment.currentMedications ?? [],
-              currentSupplements: assessment.currentSupplements ?? [],
-
-              healthScore: result.scores.healthScore,
-              sleepScore: result.scores.sleepScore,
-              stressScore: result.scores.stressScore,
-              energyScore: result.scores.energyScore,
-              focusScore: result.scores.focusScore,
-              metabolicScore: result.scores.metabolicScore,
-
-              confidenceLevel: result.confidence.confidenceLevel,
-              confidenceExplanation: result.confidence.confidenceExplanation,
-
-              executiveSummary: result.summaries.executiveSummary,
-              clinicalStyleSummary: result.summaries.clinicalStyleSummary,
-              scoreNarrative: result.summaries.scoreNarrative,
-              professionalFollowUpAdvice:
-                result.summaries.professionalFollowUpAdvice,
-
-              strengths: result.insights.strengths,
-              mainDrivers: result.insights.mainDrivers,
-              priorityActions: result.insights.priorityActions,
-              riskSignals: result.insights.riskSignals,
-              factors: [
-                ...result.insights.mainDrivers,
-                ...result.userNeeds.dominantNeeds.map(humanizeNeed),
-              ].slice(0, 8),
-
-              biomarkers: biomarkers
-                ? {
-                    fasting_glucose: biomarkers.fasting_glucose ?? null,
-                    hba1c: biomarkers.hba1c ?? null,
-                    total_cholesterol: biomarkers.total_cholesterol ?? null,
-                    hdl: biomarkers.hdl ?? null,
-                    ldl: biomarkers.ldl ?? null,
-                    triglycerides: biomarkers.triglycerides ?? null,
-                    vitamin_d: biomarkers.vitamin_d ?? null,
-                    b12: biomarkers.b12 ?? null,
-                    ferritin: biomarkers.ferritin ?? null,
-                    tsh: biomarkers.tsh ?? null,
-                    creatinine: biomarkers.creatinine ?? null,
-                    ast: biomarkers.ast ?? null,
-                    alt: biomarkers.alt ?? null,
-                    lab_date: biomarkers.lab_date ?? null,
-                  }
-                : undefined,
-            },
-            {
-              aiMode:
-                result.appliedAiMode === "advanced" ? "advanced" : "basic",
-              generatedBy: "results-page-v2",
-            }
-          );
-
-          if (!ignore) {
-            if (saveResult.saved) {
-              setSaveNotice(
-                result.appliedAiMode === "advanced"
-                  ? "Análisis avanzado guardado correctamente en tu historial."
-                  : "Análisis base guardado correctamente en tu historial."
-              );
-            } else if (!saveResult.saved && saveResult.reason === "no-user") {
-              setSaveNotice(
-                "Análisis generado. Inicia sesión para guardar este resultado en tu historial."
-              );
-            } else if (
-              !saveResult.saved &&
-              saveResult.reason === "plan-limit"
-            ) {
-              setSaveNotice(
-                `Has alcanzado el límite de análisis guardados de tu plan ${String(
-                  saveResult.plan || "actual"
-                ).toUpperCase()}. Actualiza tu plan para seguir guardando resultados.`
-              );
-            }
-          }
-        } catch (saveError: any) {
-          console.error("Error guardando análisis expandido:", saveError);
-
-          if (!ignore) {
-            setSaveNotice(
-              saveError?.message ||
-                "El análisis se generó, pero no se pudo guardar en tu historial."
-            );
-          }
-        }
+        await persistAnalysis(
+          result,
+          parsedDraft,
+          backendPlan,
+          draftSignature,
+          hasLoggedUser
+        );
       } catch (error: any) {
-        console.error("ResultsPage v2 error:", error);
+        console.error("ResultsPage v4 error:", error);
 
-        if (!ignore) {
+        safeSetState(() => {
           setAnalysisError(
             error?.message ||
               "No pudimos generar el análisis inteligente en este momento."
           );
-        }
+        });
       } finally {
-        if (!ignore) {
+        safeSetState(() => {
           setLoadingAnalysis(false);
           setPlanLoading(false);
-        }
+        });
       }
     }
 
     loadPlanAndAnalysis();
 
     return () => {
-      ignore = true;
+      cancelled = true;
     };
-  }, []);
+  }, [
+    bootstrap,
+    getCachedAnalysis,
+    persistAnalysis,
+    requestAnalysis,
+    resetUiForReload,
+    safeSetState,
+    setCachedAnalysis,
+  ]);
 
   const limits = useMemo(() => getPlanLimits(plan), [plan]);
 
