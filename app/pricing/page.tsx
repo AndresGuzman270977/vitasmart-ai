@@ -7,16 +7,15 @@ import { supabase } from "../lib/supabase";
 import {
   getHistoryLimitLabel,
   getPlanLabel,
-  getPlanLimits,
   getUpgradeTargetLabel,
   normalizePlan,
-  type UserPlan,
+  type PlanType,
 } from "../lib/planLimits";
 
 type UserProfileRow = {
   id: string;
   email?: string | null;
-  plan?: UserPlan | string | null;
+  plan?: PlanType | string | null;
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
   subscription_status?: string | null;
@@ -70,8 +69,9 @@ function PricingPageContent() {
   const searchParams = useSearchParams();
   const checkoutStatus = searchParams.get("checkout");
   const checkoutPlan = searchParams.get("plan");
+  const fromResultsUpgrade = searchParams.get("from") === "results";
 
-  const [currentPlan, setCurrentPlan] = useState<UserPlan | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<PlanType | null>(null);
   const [currentSubscriptionStatus, setCurrentSubscriptionStatus] =
     useState<string | null>(null);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
@@ -79,7 +79,7 @@ function PricingPageContent() {
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [changingPlan, setChangingPlan] = useState<UserPlan | null>(null);
+  const [changingPlan, setChangingPlan] = useState<PlanType | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [subscriptionActionLoading, setSubscriptionActionLoading] =
     useState<SubscriptionAction | null>(null);
@@ -113,10 +113,11 @@ function PricingPageContent() {
   ): Promise<UserProfileRow> {
     const userProfilesTable = supabase.from("user_profiles") as any;
 
-    const { data: existingProfile, error: existingError } = await userProfilesTable
-      .select(USER_PROFILE_SELECT)
-      .eq("id", userId)
-      .maybeSingle();
+    const { data: existingProfile, error: existingError } =
+      await userProfilesTable
+        .select(USER_PROFILE_SELECT)
+        .eq("id", userId)
+        .maybeSingle();
 
     if (existingError) {
       throw existingError;
@@ -129,7 +130,7 @@ function PricingPageContent() {
     const payload = {
       id: userId,
       email: email ?? null,
-      plan: "free" as UserPlan,
+      plan: "free" as PlanType,
       cancel_at_period_end: false,
     };
 
@@ -179,7 +180,7 @@ function PricingPageContent() {
 
         if (checkoutStatus === "success" && !ignore) {
           setMessage(
-            `Stripe confirmó tu proceso de pago${
+            `Tu pago fue procesado correctamente${
               checkoutPlan
                 ? ` para el plan ${String(checkoutPlan).toUpperCase()}`
                 : ""
@@ -258,7 +259,7 @@ function PricingPageContent() {
     }
   }
 
-  async function handleCheckout(plan: UserPlan) {
+  async function handleCheckout(plan: PlanType) {
     try {
       if (!currentUserId) {
         setMessage("Inicia sesión para activar o cambiar tu plan.");
@@ -269,6 +270,11 @@ function PricingPageContent() {
         setMessage(
           "El plan Free no se activa por Stripe. Si cancelas una suscripción de pago, tu plan volverá a Free vía webhook."
         );
+        return;
+      }
+
+      if (plan === currentPlan) {
+        setMessage("Ya estás en ese plan.");
         return;
       }
 
@@ -379,7 +385,7 @@ function PricingPageContent() {
 
   async function handleSubscriptionAction(
     action: SubscriptionAction,
-    plan?: UserPlan
+    plan?: PlanType
   ) {
     try {
       if (!currentUserId) {
@@ -437,10 +443,6 @@ function PricingPageContent() {
       setSubscriptionActionLoading(null);
     }
   }
-
-  const freeLimits = useMemo(() => getPlanLimits("free"), []);
-  const proLimits = useMemo(() => getPlanLimits("pro"), []);
-  const premiumLimits = useMemo(() => getPlanLimits("premium"), []);
 
   const subscriptionStatusLabel = useMemo(() => {
     if (!currentSubscriptionStatus) return "Sin suscripción activa";
@@ -503,7 +505,7 @@ function PricingPageContent() {
 
   const heroTitle = currentPlan
     ? currentPlan === "free"
-      ? "Desbloquea una versión mucho más profunda de tu análisis"
+      ? "Convierte una lectura inicial en una herramienta mucho más útil"
       : currentPlan === "pro"
       ? "Ya tienes una base fuerte. Premium lleva la experiencia más lejos"
       : "Ya estás en la experiencia más completa"
@@ -511,11 +513,11 @@ function PricingPageContent() {
 
   const heroDescription = currentPlan
     ? currentPlan === "free"
-      ? "Free te permite descubrir el valor inicial. Pro y Premium convierten esa primera lectura en una experiencia mucho más útil, personalizada y accionable."
+      ? "Free te permite descubrir tu punto de partida. Pro y Premium convierten esa primera lectura en una experiencia más profunda, más clara y mucho más accionable."
       : currentPlan === "pro"
-      ? "Pro ya desbloquea mucho valor. Premium es el siguiente salto si quieres máxima continuidad, mayor profundidad y una experiencia más refinada."
-      : "Premium te da la capa más completa del ecosistema VitaSmart AI, con máxima profundidad, continuidad y personalización."
-    : "Free te permite descubrir la plataforma. Pro convierte la experiencia en seguimiento real. Premium desbloquea la versión más completa, profunda y personalizada de VitaSmart AI.";
+      ? "Pro ya desbloquea mucho valor real. Premium es el siguiente salto si quieres máxima continuidad, más profundidad y una experiencia más refinada."
+      : "Premium te da la capa más completa de VitaSmart AI, con mayor profundidad, continuidad y una experiencia superior en todo el recorrido."
+    : "Empieza gratis para descubrir la plataforma. Sube a Pro si quieres más claridad y continuidad. Elige Premium si buscas la experiencia más completa, profunda y refinada.";
 
   const currentPlanNarrative = useMemo(() => {
     if (!currentPlan) {
@@ -552,7 +554,7 @@ function PricingPageContent() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Pill text="Empiezas en minutos" />
             <Pill text="Free útil desde el día uno" />
-            <Pill text="Pro = más valor real" />
+            <Pill text="Pro = más claridad y valor" />
             <Pill text="Premium = máxima profundidad" />
           </div>
 
@@ -596,12 +598,17 @@ function PricingPageContent() {
             </div>
           )}
 
+          {fromResultsUpgrade && (
+            <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+              Estás desbloqueando una versión más profunda de tu análisis.
+            </div>
+          )}
+
           {highlightResultsIntent && (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              Estás a un paso de desbloquear una lectura más completa de tu
-              análisis. Al mejorar tu plan, obtienes recomendaciones más
-              profundas, mejor priorización y una experiencia mucho más
-              accionable.
+              Estás a un paso de desbloquear una lectura mucho más completa de tu
+              análisis. Al mejorar tu plan, obtienes mejor priorización, más
+              profundidad y una experiencia claramente más útil.
             </div>
           )}
 
@@ -697,6 +704,7 @@ function PricingPageContent() {
               "Marketplace general",
               "Ideal para probar y empezar",
             ]}
+            deeperMeaning="La puerta de entrada para descubrir valor sin compromiso."
             ctaLabel={currentPlan === "free" ? "Plan actual" : "Empezar gratis"}
             secondaryLabel="Útil desde el primer día"
             onSelect={() => handleCheckout("free")}
@@ -706,12 +714,12 @@ function PricingPageContent() {
           />
 
           <PricingCard
-            badge="Más popular"
+            badge="Más recomendado"
             title="Pro"
             price="$9"
             period="/mes"
             subtitle="La opción que convierte curiosidad en seguimiento real"
-            emotionalLine="Aquí es donde VitaSmart AI empieza a sentirse mucho más poderosa, útil y accionable."
+            emotionalLine="Aquí es donde VitaSmart AI empieza a sentirse mucho más poderosa, clara y accionable."
             features={[
               `Hasta ${getHistoryLimitLabel("pro")} análisis guardados`,
               "IA avanzada desbloqueada",
@@ -719,20 +727,17 @@ function PricingPageContent() {
               "Marketplace inteligente",
               "Experiencia mucho más útil y profunda",
             ]}
+            deeperMeaning="El mejor equilibrio entre profundidad, claridad y continuidad."
             ctaLabel={
               changingPlan === "pro"
                 ? "Redirigiendo..."
                 : currentPlan === "pro"
                 ? "Plan actual"
-                : hasPaidPlan
-                ? "Gestionar desde arriba"
                 : "Desbloquear Pro"
             }
             secondaryLabel="Mejor equilibrio entre precio y valor"
             onSelect={() => handleCheckout("pro")}
-            disabled={
-              changingPlan !== null || currentPlan === "pro" || hasPaidPlan
-            }
+            disabled={changingPlan !== null || currentPlan === "pro"}
             highlighted={true}
             current={currentPlan === "pro"}
             recommended={true}
@@ -752,22 +757,17 @@ function PricingPageContent() {
               "Mayor personalización",
               "Base para la experiencia más avanzada",
             ]}
+            deeperMeaning="La experiencia de mayor profundidad dentro del ecosistema VitaSmart AI."
             ctaLabel={
               changingPlan === "premium"
                 ? "Redirigiendo..."
                 : currentPlan === "premium"
                 ? "Plan actual"
-                : hasPaidPlan
-                ? "Gestionar desde arriba"
                 : "Ir a Premium"
             }
             secondaryLabel="Máximo valor para usuarios intensivos"
             onSelect={() => handleCheckout("premium")}
-            disabled={
-              changingPlan !== null ||
-              currentPlan === "premium" ||
-              hasPaidPlan
-            }
+            disabled={changingPlan !== null || currentPlan === "premium"}
             highlighted={false}
             current={currentPlan === "premium"}
           />
@@ -830,7 +830,7 @@ function PricingPageContent() {
 
         <section className="mt-16 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <h2 className="text-2xl font-bold text-slate-900">
-            Capacidades reales por plan
+            Comparación clara por plan
           </h2>
 
           <div className="mt-8 overflow-x-auto">
@@ -880,6 +880,18 @@ function PricingPageContent() {
                   pro="Sí"
                   premium="Sí"
                 />
+                <PricingRow
+                  label="Profundidad de lectura"
+                  free="Inicial"
+                  pro="Avanzada"
+                  premium="Máxima"
+                />
+                <PricingRow
+                  label="Continuidad de uso"
+                  free="Básica"
+                  pro="Alta"
+                  premium="Máxima"
+                />
               </tbody>
             </table>
           </div>
@@ -910,6 +922,17 @@ function PricingPageContent() {
             </Link>
           </div>
         </section>
+
+        <section className="mt-16 rounded-3xl border border-amber-200 bg-amber-50 p-6">
+          <div className="text-sm font-semibold text-amber-900">
+            Aviso importante
+          </div>
+          <p className="mt-2 text-sm leading-6 text-amber-800">
+            VitaSmart AI no proporciona diagnóstico médico. La información y las
+            recomendaciones presentadas tienen fines informativos y preventivos y
+            no sustituyen la consulta con profesionales de la salud.
+          </p>
+        </section>
       </div>
     </main>
   );
@@ -931,6 +954,7 @@ function PricingCard({
   subtitle,
   emotionalLine,
   features,
+  deeperMeaning,
   ctaLabel,
   secondaryLabel,
   onSelect,
@@ -946,6 +970,7 @@ function PricingCard({
   subtitle: string;
   emotionalLine: string;
   features: string[];
+  deeperMeaning: string;
   ctaLabel: string;
   secondaryLabel: string;
   onSelect: () => void;
@@ -1023,6 +1048,16 @@ function PricingCard({
         }`}
       >
         {emotionalLine}
+      </div>
+
+      <div
+        className={`mt-4 rounded-2xl p-4 text-sm ${
+          highlighted
+            ? "bg-white/5 text-slate-300 ring-1 ring-white/10"
+            : "bg-white text-slate-600 ring-1 ring-slate-200"
+        }`}
+      >
+        {deeperMeaning}
       </div>
 
       <ul className="mt-8 space-y-3">

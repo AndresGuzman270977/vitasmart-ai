@@ -1,3 +1,5 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { stripe, getBaseUrl } from "../../../lib/stripe";
@@ -10,6 +12,16 @@ function getBearerToken(req: Request) {
   }
 
   return authHeader.replace("Bearer ", "").trim();
+}
+
+function isManagedSubscription(status?: string | null) {
+  const normalized = String(status || "").toLowerCase();
+
+  return (
+    normalized === "active" ||
+    normalized === "trialing" ||
+    normalized === "past_due"
+  );
 }
 
 export async function POST(req: Request) {
@@ -61,7 +73,7 @@ export async function POST(req: Request) {
       .from("user_profiles")
       .select("stripe_customer_id, stripe_subscription_id, subscription_status")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       return NextResponse.json(
@@ -81,6 +93,26 @@ export async function POST(req: Request) {
             "No tienes un cliente de Stripe asociado. Activa primero un plan.",
         },
         { status: 404 }
+      );
+    }
+
+    if (!profile.stripe_subscription_id) {
+      return NextResponse.json(
+        {
+          error:
+            "No tienes una suscripción activa para gestionar en el portal.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isManagedSubscription(profile.subscription_status)) {
+      return NextResponse.json(
+        {
+          error:
+            "Tu suscripción no está en un estado gestionable actualmente.",
+        },
+        { status: 400 }
       );
     }
 

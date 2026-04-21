@@ -8,7 +8,6 @@ import { supabase } from "./lib/supabase";
 import {
   getHistoryLimitLabel,
   getPlanLabel,
-  getPlanLimits,
   normalizePlan,
   type UserPlan,
 } from "./lib/planLimits";
@@ -142,10 +141,6 @@ export default function HomePage() {
     };
   }, [router]);
 
-  const freeLimits = useMemo(() => getPlanLimits("free"), []);
-  const proLimits = useMemo(() => getPlanLimits("pro"), []);
-  const premiumLimits = useMemo(() => getPlanLimits("premium"), []);
-
   const subscriptionStatusLabel = useMemo(() => {
     if (!subscriptionStatus) return "Sin suscripción activa";
 
@@ -233,31 +228,31 @@ export default function HomePage() {
             </div>
 
             <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
-              Tu Health Score en menos de 60 segundos.
-              <span className="block">Entiende tu punto de partida.</span>
-              <span className="block">Mejora con continuidad.</span>
+              Entiende tu salud en minutos.
+              <span className="block">Recibe tu Health Score.</span>
+              <span className="block">Actúa con más claridad.</span>
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-              VitaSmart AI convierte tu perfil actual en un sistema de mejora
-              continua: Health Score, análisis inteligente, historial,
-              recomendaciones personalizadas y una experiencia diseñada para
-              ayudarte a progresar de verdad.
+              VitaSmart AI analiza señales como energía, sueño, estrés y
+              metabolismo para darte una lectura clara de tu punto de partida y
+              ayudarte a mejorar con continuidad.
             </p>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
               <div className="text-sm font-semibold text-slate-900">
-                Cómo se siente la experiencia VitaSmart AI
+                Qué hace diferente a VitaSmart AI
               </div>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                {homeNarrative}
+                No es solo un test. Es una experiencia diseñada para convertir
+                tu resultado en claridad, prioridades y mejor seguimiento.
               </p>
             </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              <HeroPill text="Free para empezar hoy" />
-              <HeroPill text="Pro para seguimiento real" />
-              <HeroPill text="Premium para máxima profundidad" />
+              <HeroPill text="Empiezas gratis" />
+              <HeroPill text="Análisis en minutos" />
+              <HeroPill text="Mejoras con continuidad" />
             </div>
 
             <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -265,19 +260,19 @@ export default function HomePage() {
                 href="/quiz"
                 className="rounded-xl bg-slate-900 px-6 py-3 text-center text-base font-semibold text-white transition hover:bg-slate-700"
               >
-                Empezar análisis gratis
+                Hacer mi análisis
               </Link>
 
               <Link
                 href="/pricing"
                 className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-center text-base font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                Ver planes y beneficios
+                Ver planes
               </Link>
             </div>
 
             <p className="mt-4 text-sm text-slate-500">
-              Sin complicaciones. Empiezas en minutos.
+              Tu primera lectura puede estar lista en menos de 3 minutos.
             </p>
 
             {authError && (
@@ -304,14 +299,14 @@ export default function HomePage() {
                 </div>
 
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Un resultado así podría sugerir una base razonable, pero con
-                  oportunidades claras de mejora en energía, sueño o enfoque.
+                  Una lectura así podría sugerir una base razonable, pero con
+                  oportunidades claras de mejora en sueño, energía y enfoque.
                 </p>
 
                 <div className="mt-6 grid gap-3">
-                  <PreviewSignal label="Estrés alto detectado" />
-                  <PreviewSignal label="Sueño subóptimo" />
-                  <PreviewSignal label="Enfoque mejorable" />
+                  <PreviewSignal label="Sueño subóptimo detectado" />
+                  <PreviewSignal label="Estrés más alto de lo ideal" />
+                  <PreviewSignal label="Enfoque con margen de mejora" />
                 </div>
               </div>
 
@@ -319,49 +314,49 @@ export default function HomePage() {
                 <HeroStat
                   label="Health Score"
                   value="72/100"
-                  note="Ejemplo realista"
+                  note="Lectura inicial"
                 />
                 <HeroStat
-                  label="Modo IA"
+                  label="Siguiente nivel"
                   value="Pro"
                   note="Más profundidad"
                 />
                 <HeroStat
-                  label="Historial"
+                  label="Continuidad"
                   value="50+"
-                  note="Seguimiento real"
+                  note="Historial real"
                 />
               </div>
 
               <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                 <div className="text-sm font-semibold text-slate-900">
-                  Lo que hace diferente a VitaSmart AI
+                  Qué gana el usuario al continuar
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  No es solo un test. Es una experiencia que te ayuda a entender
-                  tu estado actual, detectar patrones y tomar mejores decisiones
-                  con continuidad.
+                  La verdadera diferencia aparece cuando dejas de ver solo un
+                  score y empiezas a usar VitaSmart AI como una herramienta de
+                  seguimiento y decisión.
                 </p>
               </div>
             </div>
 
             <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-sm">
               <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
-                Por qué la gente sube de plan
+                Qué desbloquea cada nivel
               </div>
               <div className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
                 <p>
-                  <strong className="text-white">Free</strong> permite descubrir
-                  la plataforma y obtener una lectura inicial útil.
+                  <strong className="text-white">Free</strong> te deja descubrir
+                  tu punto de partida sin fricción.
                 </p>
                 <p>
-                  <strong className="text-white">Pro</strong> convierte la
-                  experiencia en seguimiento real con IA avanzada y
-                  recomendaciones priorizadas.
+                  <strong className="text-white">Pro</strong> convierte el
+                  resultado en una experiencia mucho más clara, útil y
+                  accionable.
                 </p>
                 <p>
                   <strong className="text-white">Premium</strong> desbloquea la
-                  versión más completa, más continua y más refinada de la app.
+                  versión más completa, más continua y más profunda de la app.
                 </p>
               </div>
             </div>
@@ -373,30 +368,66 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Empieza gratis. Siente el valor. Mejora cuando quieras escalar.
+              Cómo funciona VitaSmart AI
             </h2>
             <p className="mt-4 text-slate-600">
-              VitaSmart AI está diseñada para que ganes claridad desde el primer
-              análisis y puedas evolucionar hacia una experiencia más profunda.
+              El objetivo no es darte más información. Es darte una lectura
+              clara y ayudarte a actuar con más criterio.
             </p>
           </div>
 
           <div className="mt-14 grid gap-6 md:grid-cols-3">
             <StepCard
               step="01"
-              title="Descubre tu punto de partida"
-              description="Completa tu assessment y recibe un Health Score con lectura inicial de tu perfil."
+              title="Respondes un assessment rápido"
+              description="Completa tu quiz y comparte señales clave sobre sueño, energía, estrés, hábitos y objetivo principal."
             />
             <StepCard
               step="02"
-              title="Identifica patrones y prioridades"
-              description="Comprende cómo sueño, estrés, edad y objetivo impactan tu bienestar actual."
+              title="Recibes tu Health Score"
+              description="Obtienes una lectura inicial de tu perfil actual, con señales y prioridades que vale la pena observar."
             />
             <StepCard
               step="03"
-              title="Escala a una experiencia superior"
-              description="Activa Pro o Premium para desbloquear análisis más ricos, más historial y recomendaciones más inteligentes."
+              title="Escalas cuando quieres más valor"
+              description="Sube a Pro o Premium para desbloquear más profundidad, más seguimiento y una experiencia mucho más útil."
             />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
+              El problema
+            </div>
+
+            <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900">
+              La mayoría de las personas no sabe qué priorizar
+            </h2>
+
+            <div className="mt-6 grid gap-3">
+              <ProblemRow text="Tienen señales difusas, pero no claridad real." />
+              <ProblemRow text="Prueban cambios o suplementos sin criterio suficiente." />
+              <ProblemRow text="No construyen continuidad ni seguimiento útil." />
+            </div>
+          </div>
+
+          <div className="rounded-3xl bg-slate-900 p-8 text-white shadow-sm">
+            <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-1 text-sm text-slate-300">
+              La propuesta
+            </div>
+
+            <h2 className="mt-6 text-3xl font-bold tracking-tight">
+              VitaSmart AI convierte señales sueltas en claridad accionable
+            </h2>
+
+            <div className="mt-6 grid gap-3">
+              <ValueRowDark text="Te muestra tu punto de partida actual" />
+              <ValueRowDark text="Te ayuda a ver qué conviene atacar primero" />
+              <ValueRowDark text="Te permite ganar continuidad con el tiempo" />
+            </div>
           </div>
         </div>
       </section>
@@ -412,8 +443,8 @@ export default function HomePage() {
           </h2>
 
           <p className="mt-4 text-slate-600">
-            Diseñado para que Free sea útil, Pro sea convincente y Premium sea
-            deseable.
+            Free te deja empezar. Pro es donde VitaSmart AI empieza a sentirse
+            realmente poderosa. Premium es la experiencia más completa.
           </p>
         </div>
 
@@ -437,17 +468,17 @@ export default function HomePage() {
           />
 
           <PlanCard
-            badge="Más popular"
+            badge="Más recomendado"
             title="Pro"
-            price="$9"
-            period="/mes"
+            price="$39.000"
+            period="COP / mes"
             subtitle="Donde la plataforma realmente cobra vida"
             features={[
               `Hasta ${getHistoryLimitLabel("pro")} análisis guardados`,
               "IA avanzada",
               "Recomendaciones priorizadas",
               "Marketplace inteligente",
-              "Seguimiento más serio y útil",
+              "Seguimiento mucho más útil",
             ]}
             ctaHref="/pricing"
             ctaLabel="Quiero Pro"
@@ -458,14 +489,14 @@ export default function HomePage() {
           <PlanCard
             badge="Advanced"
             title="Premium"
-            price="$19"
-            period="/mes"
+            price="$69.000"
+            period="COP / mes"
             subtitle="La experiencia más completa de VitaSmart AI"
             features={[
               `Hasta ${getHistoryLimitLabel("premium")} análisis guardados`,
               "Todo lo de Pro",
               "Marketplace premium",
-              "Mayor personalización",
+              "Mayor continuidad",
               "Máximo control y profundidad",
             ]}
             ctaHref="/pricing"
@@ -480,16 +511,16 @@ export default function HomePage() {
         <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="max-w-3xl">
             <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
-              Comparación rápida
+              Qué cambia al mejorar tu plan
             </div>
 
             <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Qué cambia realmente cuando mejoras tu plan
+              La diferencia no es solo tener más funciones
             </h2>
 
             <p className="mt-4 text-slate-600">
-              Free te deja empezar. Pro te da una experiencia mucho más útil.
-              Premium te entrega la versión más completa de VitaSmart AI.
+              La diferencia real es pasar de una lectura inicial a una
+              experiencia más útil, más profunda y con mejor continuidad.
             </p>
           </div>
 
@@ -536,10 +567,22 @@ export default function HomePage() {
                   premium="Sí"
                 />
                 <HomeComparisonRow
-                  label="Experiencia premium"
+                  label="Marketplace premium"
                   free="No"
-                  pro="Parcial"
+                  pro="No"
                   premium="Sí"
+                />
+                <HomeComparisonRow
+                  label="Profundidad de lectura"
+                  free="Inicial"
+                  pro="Avanzada"
+                  premium="Máxima"
+                />
+                <HomeComparisonRow
+                  label="Continuidad"
+                  free="Básica"
+                  pro="Alta"
+                  premium="Máxima"
                 />
               </tbody>
             </table>
@@ -571,9 +614,9 @@ export default function HomePage() {
                 Lo que desbloquea Pro
               </h2>
               <p className="mt-4 leading-7 text-slate-600">
-                Pro está diseñado para usuarios que ya entendieron el valor del
-                análisis inicial y quieren una experiencia más útil, más clara y
-                más continua.
+                Pro está pensado para usuarios que ya entendieron el valor del
+                análisis inicial y quieren una experiencia más clara, más útil y
+                con mejor continuidad.
               </p>
 
               <div className="mt-6 grid gap-3">
@@ -590,14 +633,14 @@ export default function HomePage() {
               </h2>
               <p className="mt-4 leading-7 text-slate-300">
                 Premium no es solo “más”. Es la versión más completa, más
-                continua y más refinada del sistema VitaSmart AI.
+                continua y más profunda del sistema VitaSmart AI.
               </p>
 
               <div className="mt-6 grid gap-3">
                 <ValueRowDark text="Análisis ilimitados" />
-                <ValueRowDark text="Mayor profundidad y continuidad" />
-                <ValueRowDark text="Experiencia más premium en marketplace" />
-                <ValueRowDark text="Base ideal para futuras funciones exclusivas" />
+                <ValueRowDark text="Mayor continuidad y contexto" />
+                <ValueRowDark text="Experiencia premium en marketplace" />
+                <ValueRowDark text="Máxima profundidad disponible en la app" />
               </div>
             </div>
           </div>
@@ -605,43 +648,61 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-20">
-        <div className="rounded-3xl bg-slate-900 px-8 py-12 text-white shadow-sm sm:px-12">
-          <div className="max-w-3xl">
-            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">
+        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-1 text-sm text-slate-600">
               Empieza hoy
             </div>
 
-            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              El mejor momento para conocer tu punto de partida es ahora
+            <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Tu primer análisis puede ser el inicio de una mejora real
             </h2>
 
-            <p className="mt-4 text-slate-300">
-              Entra gratis, descubre tu perfil actual y decide si quieres
-              quedarte en lo básico o pasar a una experiencia mucho más valiosa.
+            <p className="mt-4 text-slate-600">
+              Entra gratis, descubre tu punto de partida y decide después si
+              quieres seguir en lo básico o pasar a una experiencia mucho más
+              valiosa.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Link
                 href="/quiz"
-                className="inline-flex rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-slate-100"
+                className="inline-flex justify-center rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white transition hover:bg-slate-700"
               >
                 Hacer mi análisis ahora
               </Link>
 
               <Link
                 href="/pricing"
-                className="inline-flex rounded-xl border border-white/20 px-6 py-3 font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex justify-center rounded-xl border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Comparar planes
               </Link>
             </div>
 
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              {homeNarrative}
+            </div>
+
             {subscriptionStatus && (
-              <p className="mt-5 text-sm text-slate-400">
+              <p className="mt-5 text-sm text-slate-500">
                 Estado actual detectado: {subscriptionStatusLabel}.
               </p>
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
+          <div className="text-sm font-semibold text-amber-900">
+            Aviso importante
+          </div>
+          <p className="mt-2 text-sm leading-6 text-amber-800">
+            VitaSmart AI no proporciona diagnóstico médico. La información y las
+            recomendaciones presentadas tienen fines informativos y preventivos y
+            no sustituyen la consulta con profesionales de la salud.
+          </p>
         </div>
       </section>
     </main>
@@ -698,6 +759,14 @@ function StepCard({
       </div>
       <h3 className="mt-3 text-xl font-semibold text-slate-900">{title}</h3>
       <p className="mt-3 leading-7 text-slate-600">{description}</p>
+    </div>
+  );
+}
+
+function ProblemRow({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 text-slate-700 ring-1 ring-slate-200">
+      {text}
     </div>
   );
 }

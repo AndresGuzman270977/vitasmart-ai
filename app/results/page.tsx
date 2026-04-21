@@ -444,19 +444,7 @@ function ResultsPageContent() {
       draftSignature: string,
       hasLoggedUser: boolean
     ) => {
-      if (result.persistence?.saved) {
-        safeSetState(() => {
-          setSaveNotice(
-            result.appliedAiMode === "advanced"
-              ? "Análisis avanzado guardado correctamente en tu historial."
-              : "Análisis base guardado correctamente en tu historial."
-          );
-        });
-        lastSavedSignatureRef.current = draftSignature;
-        return;
-      }
-
-      const saveSignature = `${draftSignature}::${result.assessmentVersion}::${result.appliedAiMode}`;
+      const saveSignature = `${draftSignature}::${result.assessmentVersion}::${result.appliedAiMode}::${backendPlan}`;
 
       if (lastSavedSignatureRef.current === saveSignature) {
         return;
@@ -486,7 +474,7 @@ function ResultsPageContent() {
             assessmentVersion: result.assessmentVersion,
             plan: backendPlan,
             aiMode,
-            generatedBy: "results-page-v4",
+            generatedBy: "results-page-v5",
 
             age: assessment.age,
             sex: assessment.sex,
@@ -566,7 +554,7 @@ function ResultsPageContent() {
           },
           {
             aiMode,
-            generatedBy: "results-page-v4",
+            generatedBy: "results-page-v5",
           }
         );
 
@@ -577,7 +565,7 @@ function ResultsPageContent() {
             setSaveNotice(
               result.appliedAiMode === "advanced"
                 ? "Análisis avanzado guardado correctamente en tu historial."
-                : "Análisis base guardado correctamente en tu historial."
+                : "Análisis guardado correctamente en tu historial."
             );
           } else if (!saveResult.saved && saveResult.reason === "no-user") {
             setSaveNotice(
@@ -653,7 +641,7 @@ function ResultsPageContent() {
           hasLoggedUser
         );
       } catch (error: any) {
-        console.error("ResultsPage v4 error:", error);
+        console.error("ResultsPage v5 error:", error);
 
         safeSetState(() => {
           setAnalysisError(
@@ -909,6 +897,26 @@ function ResultsPageContent() {
     return analysis?.productRecommendations?.[0] || null;
   }, [analysis?.productRecommendations]);
 
+  const upgradePitch = useMemo(() => {
+    if (plan === "premium") return null;
+
+    if (plan === "pro") {
+      return {
+        title: "Lleva tu lectura al nivel más completo",
+        subtitle:
+          "Ya tienes una experiencia sólida. Premium añade más continuidad, más profundidad y una capa todavía más refinada.",
+        cta: "Quiero Premium",
+      };
+    }
+
+    return {
+      title: "Esto es solo una parte del análisis real",
+      subtitle:
+        "Con Pro desbloqueas IA avanzada, mejor priorización y una lectura mucho más útil para actuar con intención.",
+      cta: "Desbloquear Pro",
+    };
+  }, [plan]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-6xl">
@@ -1158,7 +1166,7 @@ function ResultsPageContent() {
                   </p>
                 </div>
 
-                {showUpgradeMessaging && potentialScore > 0 && (
+                {showUpgradeMessaging && potentialScore > 0 && upgradePitch && (
                   <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-5">
                     <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
                       Potencial de mejora
@@ -1166,20 +1174,25 @@ function ResultsPageContent() {
                     <p className="mt-2 text-lg font-semibold text-slate-900">
                       Podrías llevar tu Health Score hacia{" "}
                       <span className="text-violet-700">{potentialScore}+</span>{" "}
-                      con ajustes más personalizados.
+                      con una lectura más profunda.
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-700">
-                      Estás viendo una versión limitada del análisis. Los planes
-                      Pro y Premium desbloquean recomendaciones más profundas y
-                      una lectura más útil para actuar con intención.
+                      {upgradePitch.subtitle}
                     </p>
 
-                    <div className="mt-4">
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                       <Link
                         href="/pricing"
                         className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
                       >
-                        Desbloquear mi análisis completo
+                        {upgradePitch.cta}
+                      </Link>
+
+                      <Link
+                        href="/pricing"
+                        className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Comparar planes
                       </Link>
                     </div>
                   </div>
@@ -1232,6 +1245,33 @@ function ResultsPageContent() {
                           </p>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {!advancedAIEnabled && upgradePitch && (
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                          Desbloquea la versión completa
+                        </div>
+                        <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                          {upgradePitch.title}
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {plan === "free"
+                            ? "Con Pro accedes a IA avanzada, más profundidad y una priorización mucho más útil. Con Premium llevas la experiencia al máximo nivel."
+                            : "Premium amplía la continuidad, la profundidad y la capa más completa de interpretación dentro de VitaSmart AI."}
+                        </p>
+                      </div>
+
+                      <Link
+                        href="/pricing"
+                        className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        {upgradePitch.cta}
+                      </Link>
                     </div>
                   </div>
                 )}
@@ -1299,6 +1339,39 @@ function ResultsPageContent() {
               />
             </div>
 
+            {!advancedAIEnabled && (
+              <div className="mt-8 rounded-2xl border border-violet-200 bg-violet-50 p-6">
+                <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+                  Antes de seguir
+                </div>
+                <h2 className="mt-2 text-2xl font-bold text-slate-900">
+                  Este resultado puede volverse mucho más útil
+                </h2>
+                <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-700">
+                  Lo que estás viendo ya tiene valor, pero aún es una lectura
+                  parcial. Los planes Pro y Premium desbloquean una capa mucho
+                  más accionable: más profundidad, mejor priorización y una
+                  experiencia claramente más útil para decidir qué hacer después.
+                </p>
+
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href="/pricing"
+                    className="inline-flex rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white transition hover:bg-slate-700"
+                  >
+                    Ver planes
+                  </Link>
+
+                  <Link
+                    href="/pricing"
+                    className="inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-center font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Comparar Pro vs Premium
+                  </Link>
+                </div>
+              </div>
+            )}
+
             <div className="mt-8">
               <ResultInsightsPanel
                 scoreNarrative={analysis.summaries.scoreNarrative}
@@ -1344,8 +1417,8 @@ function ResultsPageContent() {
                           {topProductIngredient.evidenceLevel === "high"
                             ? "Evidencia alta"
                             : topProductIngredient.evidenceLevel === "moderate"
-                              ? "Evidencia moderada"
-                              : "Evidencia limitada"}
+                            ? "Evidencia moderada"
+                            : "Evidencia limitada"}
                         </span>
                       ) : null}
                     </div>
@@ -1658,15 +1731,15 @@ function PriorityBadge({ value }: { value: number }) {
     value >= 80
       ? "bg-red-100 text-red-700"
       : value >= 60
-        ? "bg-amber-100 text-amber-700"
-        : "bg-slate-100 text-slate-700";
+      ? "bg-amber-100 text-amber-700"
+      : "bg-slate-100 text-slate-700";
 
   const label =
     value >= 80
       ? "Prioridad alta"
       : value >= 60
-        ? "Prioridad media"
-        : "Prioridad base";
+      ? "Prioridad media"
+      : "Prioridad base";
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>
@@ -1704,8 +1777,8 @@ function TierBadge({
     value === "excellent"
       ? "Excelente"
       : value === "very_good"
-        ? "Muy buena"
-        : "Buena";
+      ? "Muy buena"
+      : "Buena";
 
   return (
     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">

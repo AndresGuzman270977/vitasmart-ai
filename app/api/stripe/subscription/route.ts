@@ -13,6 +13,19 @@ type SubscriptionBody = {
   plan?: PlanType;
 };
 
+type UserProfileRow = {
+  id: string;
+  email?: string | null;
+  plan?: PlanType | string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
+};
+
+const USER_PROFILE_SELECT =
+  "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end";
+
 function getBearerToken(req: Request) {
   const authHeader = req.headers.get("authorization");
 
@@ -23,8 +36,17 @@ function getBearerToken(req: Request) {
   return authHeader.replace("Bearer ", "").trim();
 }
 
+function sanitizeSubscriptionStatus(value?: string | null) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function isManagedPaidStatus(status?: string | null) {
-  return status === "active" || status === "trialing" || status === "past_due";
+  const normalized = sanitizeSubscriptionStatus(status);
+  return (
+    normalized === "active" ||
+    normalized === "trialing" ||
+    normalized === "past_due"
+  );
 }
 
 export async function POST(req: Request) {
@@ -63,7 +85,7 @@ export async function POST(req: Request) {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser(token);
+    } = await supabase.auth.getUser();
 
     if (userError || !user) {
       return NextResponse.json(
@@ -72,7 +94,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = (await req.json()) as SubscriptionBody;
+    let body: SubscriptionBody;
+    try {
+      body = (await req.json()) as SubscriptionBody;
+    } catch {
+      return NextResponse.json(
+        { error: "El cuerpo de la solicitud no es válido." },
+        { status: 400 }
+      );
+    }
+
     const action = body.action;
 
     if (!action) {
@@ -84,19 +115,27 @@ export async function POST(req: Request) {
 
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
-      )
+      .select(USER_PROFILE_SELECT)
       .eq("id", user.id)
-      .single();
+      .maybeSingle<UserProfileRow>();
 
-    if (profileError || !profile) {
+    if (profileError) {
       return NextResponse.json(
         {
           error:
-            profileError?.message || "No se pudo cargar el perfil del usuario.",
+            profileError.message || "No se pudo cargar el perfil del usuario.",
         },
         { status: 500 }
+      );
+    }
+
+    if (!profile) {
+      return NextResponse.json(
+        {
+          error:
+            "No se encontró el perfil del usuario. Refresca e inténtalo nuevamente.",
+        },
+        { status: 404 }
       );
     }
 
@@ -124,6 +163,13 @@ export async function POST(req: Request) {
     const subscriptionItem = subscription.items.data[0];
 
     if (action === "switch_plan") {
+      if (!body.plan) {
+        return NextResponse.json(
+          { error: "Debes indicar el plan destino." },
+          { status: 400 }
+        );
+      }
+
       const targetPlan = normalizePlan(body.plan);
 
       if (targetPlan === "free") {
@@ -167,7 +213,7 @@ export async function POST(req: Request) {
         }
       );
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("user_profiles")
         .update({
           plan: targetPlan,
@@ -176,6 +222,17 @@ export async function POST(req: Request) {
             updatedSubscription.cancel_at_period_end ?? false,
         })
         .eq("id", user.id);
+
+      if (updateError) {
+        return NextResponse.json(
+          {
+            error:
+              updateError.message ||
+              "Stripe actualizó la suscripción, pero no se pudo reflejar en tu perfil.",
+          },
+          { status: 500 }
+        );
+      }
 
       return NextResponse.json({
         ok: true,
@@ -198,6 +255,18 @@ export async function POST(req: Request) {
         );
       }
 
+      if (subscription.cancel_at_period_end) {
+        return NextResponse.json({
+          ok: true,
+          action,
+          subscriptionId: subscription.id,
+          status: subscription.status,
+          cancelAtPeriodEnd: true,
+          message:
+            "Tu suscripción ya estaba programada para cancelarse al final del período.",
+        });
+      }
+
       const updatedSubscription = await stripe.subscriptions.update(
         profile.stripe_subscription_id,
         {
@@ -205,13 +274,24 @@ export async function POST(req: Request) {
         }
       );
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("user_profiles")
         .update({
           subscription_status: updatedSubscription.status,
           cancel_at_period_end: true,
         })
         .eq("id", user.id);
+
+      if (updateError) {
+        return NextResponse.json(
+          {
+            error:
+              updateError.message ||
+              "Stripe actualizó la suscripción, pero no se pudo reflejar en tu perfil.",
+          },
+          { status: 500 }
+        );
+      }
 
       return NextResponse.json({
         ok: true,
@@ -225,6 +305,17 @@ export async function POST(req: Request) {
     }
 
     if (action === "resume") {
+      if (!subscription.cancel_at_period_end) {
+        return NextResponse.json({
+          ok: true,
+          action,
+          subscriptionId: subscription.id,
+          status: subscription.status,
+          cancelAtPeriodEnd: false,
+          message: "Tu suscripción ya estaba activa sin cancelación programada.",
+        });
+      }
+
       const updatedSubscription = await stripe.subscriptions.update(
         profile.stripe_subscription_id,
         {
@@ -232,13 +323,24 @@ export async function POST(req: Request) {
         }
       );
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("user_profiles")
         .update({
           subscription_status: updatedSubscription.status,
           cancel_at_period_end: false,
         })
         .eq("id", user.id);
+
+      if (updateError) {
+        return NextResponse.json(
+          {
+            error:
+              updateError.message ||
+              "Stripe actualizó la suscripción, pero no se pudo reflejar en tu perfil.",
+          },
+          { status: 500 }
+        );
+      }
 
       return NextResponse.json({
         ok: true,

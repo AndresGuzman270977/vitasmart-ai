@@ -35,20 +35,6 @@ const DEFAULT_PLAN: PlanType = "free";
 const USER_PROFILE_SELECT =
   "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at, updated_at";
 
-function makeFallbackProfile(user: BasicUser): UserProfile {
-  return {
-    id: user.id,
-    email: user.email ?? null,
-    plan: DEFAULT_PLAN,
-    stripe_customer_id: null,
-    stripe_subscription_id: null,
-    subscription_status: null,
-    cancel_at_period_end: false,
-    created_at: undefined,
-    updated_at: undefined,
-  };
-}
-
 async function getAuthenticatedUser(): Promise<BasicUser | null> {
   try {
     const {
@@ -108,7 +94,9 @@ async function selectProfileByUserId(
   return (data as UserProfileRow | null) ?? null;
 }
 
-export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+export async function getUserProfile(
+  userId: string
+): Promise<UserProfile | null> {
   try {
     const data = await selectProfileByUserId(userId);
 
@@ -143,21 +131,20 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
     return null;
   }
 
-  const existingProfile = await getUserProfile(user.id);
-
-  if (existingProfile) {
-    return existingProfile;
-  }
-
-  const payload = {
-    id: user.id,
-    email: user.email ?? null,
-    plan: DEFAULT_PLAN,
-    cancel_at_period_end: false,
-  };
-
   try {
-    // Fix de tipado para builds de Vercel / Supabase types incompletos
+    const existingProfile = await selectProfileByUserId(user.id);
+
+    if (existingProfile) {
+      return normalizeProfile(existingProfile);
+    }
+
+    const payload = {
+      id: user.id,
+      email: user.email ?? null,
+      plan: DEFAULT_PLAN,
+      cancel_at_period_end: false,
+    };
+
     const userProfilesTable = supabase.from("user_profiles") as any;
 
     const { data, error } = await userProfilesTable
@@ -169,11 +156,11 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
 
     if (error) {
       console.error("Error ensuring user profile:", error.message);
-      return makeFallbackProfile(user);
+      return null;
     }
 
     if (!data) {
-      return makeFallbackProfile(user);
+      return null;
     }
 
     return normalizeProfile(data as UserProfileRow);
@@ -182,7 +169,7 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
       "Unexpected error ensuring user profile:",
       error?.message || error
     );
-    return makeFallbackProfile(user);
+    return null;
   }
 }
 
@@ -191,7 +178,6 @@ export async function updateUserPlan(
   plan: PlanType
 ): Promise<UserProfile> {
   try {
-    // Fix de tipado para builds de Vercel / Supabase types incompletos
     const userProfilesTable = supabase.from("user_profiles") as any;
 
     const { data, error } = await userProfilesTable

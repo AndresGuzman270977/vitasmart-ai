@@ -131,6 +131,8 @@ export type SaveAssessmentResult =
 
 type LooseRow = Record<string, unknown>;
 
+const DEDUPE_WINDOW_MINUTES = 10;
+
 function sanitizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -437,6 +439,44 @@ function buildLegacyFallbackFromExpanded(
   );
 }
 
+async function findRecentDuplicateExpandedAssessment(params: {
+  userId: string;
+  assessmentVersion: string;
+  healthScore: number;
+  mainGoal: string | null;
+  executiveSummary: string;
+  aiMode: AssessmentAiMode;
+}): Promise<boolean> {
+  const since = new Date(
+    Date.now() - DEDUPE_WINDOW_MINUTES * 60 * 1000
+  ).toISOString();
+
+  const { data, error } = await (supabase
+    .from("health_assessments")
+    .select(
+      "id, assessment_version, health_score, main_goal, executive_summary, ai_mode, created_at"
+    )
+    .eq("user_id", params.userId)
+    .eq("assessment_version", params.assessmentVersion)
+    .eq("health_score", params.healthScore)
+    .eq("ai_mode", params.aiMode)
+    .eq("executive_summary", params.executiveSummary)
+    .gte("created_at", since) as any);
+
+  if (error) {
+    console.warn("No se pudo verificar duplicado reciente:", error.message);
+    return false;
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+
+  return rows.some((row) => {
+    const rowMainGoal =
+      typeof row?.main_goal === "string" ? row.main_goal.trim() : null;
+    return rowMainGoal === params.mainGoal;
+  });
+}
+
 async function insertHealthAssessment(
   payload: LooseRow
 ): Promise<{ id: string }> {
@@ -599,8 +639,37 @@ export async function saveAssessment(
 
   validateExpandedPayload(data);
 
+  const normalizedAssessmentVersion =
+    sanitizeString(data.assessmentVersion) || "v2.0.0";
+  const normalizedExecutiveSummary = sanitizeString(data.executiveSummary);
+  const normalizedMainGoal = sanitizeNullableString(data.mainGoal);
+  const normalizedHealthScore = sanitizeScore(data.healthScore);
+
+  const duplicateExists = await findRecentDuplicateExpandedAssessment({
+    userId: user.id,
+    assessmentVersion: normalizedAssessmentVersion,
+    healthScore: normalizedHealthScore,
+    mainGoal: normalizedMainGoal,
+    executiveSummary: normalizedExecutiveSummary,
+    aiMode: finalAiMode,
+  });
+
+  if (duplicateExists) {
+    return {
+      saved: true,
+      plan: userPlan,
+      aiModeApplied: finalAiMode,
+    };
+  }
+
   const expandedPayload = buildExpandedPayload(
-    data,
+    {
+      ...data,
+      assessmentVersion: normalizedAssessmentVersion,
+      executiveSummary: normalizedExecutiveSummary,
+      healthScore: normalizedHealthScore,
+      mainGoal: normalizedMainGoal ?? undefined,
+    },
     user.id,
     userPlan,
     finalAiMode,

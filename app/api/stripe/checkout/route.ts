@@ -7,6 +7,19 @@ type CheckoutBody = {
   plan?: PlanType;
 };
 
+type UserProfileRow = {
+  id: string;
+  email?: string | null;
+  plan?: PlanType | string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
+};
+
+const USER_PROFILE_SELECT =
+  "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end";
+
 function getBearerToken(req: Request) {
   const authHeader = req.headers.get("authorization");
 
@@ -15,6 +28,14 @@ function getBearerToken(req: Request) {
   }
 
   return authHeader.replace("Bearer ", "").trim();
+}
+
+function sanitizeSubscriptionStatus(value?: string | null) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isManageableSubscriptionStatus(status: string) {
+  return status === "active" || status === "trialing" || status === "past_due";
 }
 
 export async function POST(req: Request) {
@@ -53,7 +74,7 @@ export async function POST(req: Request) {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser(token);
+    } = await supabase.auth.getUser();
 
     if (userError || !user) {
       return NextResponse.json(
@@ -62,7 +83,23 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = (await req.json()) as CheckoutBody;
+    let body: CheckoutBody;
+    try {
+      body = (await req.json()) as CheckoutBody;
+    } catch {
+      return NextResponse.json(
+        { error: "El cuerpo de la solicitud no es válido." },
+        { status: 400 }
+      );
+    }
+
+    if (!body?.plan) {
+      return NextResponse.json(
+        { error: "Debes indicar el plan que deseas activar." },
+        { status: 400 }
+      );
+    }
+
     const requestedPlan = normalizePlan(body.plan);
 
     if (requestedPlan === "free") {
@@ -72,13 +109,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select(
-        "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end"
-      )
+      .select(USER_PROFILE_SELECT)
       .eq("id", user.id)
-      .maybeSingle();
+      .maybeSingle<UserProfileRow>();
 
     if (profileError) {
       return NextResponse.json(
@@ -87,11 +122,58 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!profile) {
+      const { data: createdProfile, error: createProfileError } = await supabase
+        .from("user_profiles")
+        .upsert(
+          [
+            {
+              id: user.id,
+              email: user.email ?? null,
+              plan: "free",
+              cancel_at_period_end: false,
+            },
+          ],
+          { onConflict: "id" }
+        )
+        .select(USER_PROFILE_SELECT)
+        .single<UserProfileRow>();
+
+      if (createProfileError || !createdProfile) {
+        return NextResponse.json(
+          {
+            error:
+              createProfileError?.message ||
+              "No se pudo crear el perfil del usuario.",
+          },
+          { status: 500 }
+        );
+      }
+
+      profile = createdProfile;
+    }
+
     let customerId = profile?.stripe_customer_id || null;
+    const currentStatus = sanitizeSubscriptionStatus(
+      profile?.subscription_status
+    );
+
+    if (
+      profile?.stripe_subscription_id &&
+      isManageableSubscriptionStatus(currentStatus)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Ya tienes una suscripción activa o gestionable. Usa el portal para administrarla.",
+        },
+        { status: 400 }
+      );
+    }
 
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: user.email ?? undefined,
+        email: user.email ?? profile?.email ?? undefined,
         metadata: {
           supabase_user_id: user.id,
         },
@@ -117,23 +199,6 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-    }
-
-    const currentStatus = String(profile?.subscription_status || "").trim();
-
-    if (
-      profile?.stripe_subscription_id &&
-      (currentStatus === "active" ||
-        currentStatus === "trialing" ||
-        currentStatus === "past_due")
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Ya tienes una suscripción activa o gestionable. Usa el portal para administrarla.",
-        },
-        { status: 400 }
-      );
     }
 
     const priceId = getStripePriceId(requestedPlan);

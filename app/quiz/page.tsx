@@ -269,10 +269,7 @@ export default function QuizPage() {
         return "Selecciona un objetivo principal.";
       }
 
-      if (
-        a.bloodPressureKnown &&
-        (!a.systolicBp || !a.diastolicBp)
-      ) {
+      if (a.bloodPressureKnown && (!a.systolicBp || !a.diastolicBp)) {
         return "Si conoces tu presión arterial, completa sistólica y diastólica.";
       }
     }
@@ -335,6 +332,19 @@ export default function QuizPage() {
 
   const progress = Math.round((step / TOTAL_STEPS) * 100);
 
+  const progressNarrative = useMemo(() => {
+    if (step === 1) return "Empezamos por tu base corporal.";
+    if (step === 2) return "Ahora capturamos sueño, estrés y fatiga.";
+    if (step === 3) return "Tus hábitos ayudan a priorizar mejor.";
+    if (step === 4) return "Aquí definimos contexto y objetivo principal.";
+    if (step === 5) {
+      return canUseBiomarkers
+        ? "Este bloque añade una capa más profunda de interpretación."
+        : "Este bloque está reservado para Pro y Premium.";
+    }
+    return "Última revisión antes de generar tu lectura.";
+  }, [step, canUseBiomarkers]);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-6xl">
@@ -358,15 +368,26 @@ export default function QuizPage() {
           </div>
 
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900">
-            Evaluación preventiva estructurada
+            Construye tu lectura preventiva en pocos minutos
           </h1>
 
           <p className="mt-4 max-w-4xl text-lg leading-8 text-slate-600">
             Esta evaluación organiza tu perfil por bloques para construir una
             lectura más seria, más útil y mejor priorizada. No busca hacer
-            diagnóstico, sino orientar, resumir señales y ayudarte a ordenar
-            prioridades.
+            diagnóstico, sino ayudarte a entender tu punto de partida y ordenar
+            mejor tus prioridades.
           </p>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">
+              Qué obtendrás al finalizar
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Un Health Score, una lectura general de tu perfil, señales
+              dominantes, prioridades sugeridas y una interpretación mucho más
+              útil para decidir qué hacer después.
+            </p>
+          </div>
 
           <div className="mt-8">
             <div className="flex items-center justify-between gap-4">
@@ -384,6 +405,8 @@ export default function QuizPage() {
                 style={{ width: `${progress}%` }}
               />
             </div>
+
+            <p className="mt-3 text-sm text-slate-500">{progressNarrative}</p>
           </div>
         </section>
 
@@ -447,7 +470,11 @@ export default function QuizPage() {
 
               <ReadOnlyCard
                 label="IMC estimado"
-                value={bmi != null ? `${bmi}` : "Se calcula al ingresar peso y estatura"}
+                value={
+                  bmi != null
+                    ? `${bmi}`
+                    : "Se calcula al ingresar peso y estatura"
+                }
               />
             </div>
           )}
@@ -628,6 +655,11 @@ export default function QuizPage() {
                   Objetivo principal
                 </h3>
 
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Elegir un objetivo ayuda a que VitaSmart AI priorice mejor el
+                  análisis y la narrativa final.
+                </p>
+
                 <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {GOAL_OPTIONS.map((item) => {
                     const active = draft.assessment.mainGoal === item.value;
@@ -643,7 +675,9 @@ export default function QuizPage() {
                             : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
                         }`}
                       >
-                        <div className="text-base font-semibold">{item.label}</div>
+                        <div className="text-base font-semibold">
+                          {item.label}
+                        </div>
                         <div
                           className={`mt-2 text-sm leading-6 ${
                             active ? "text-slate-200" : "text-slate-600"
@@ -688,7 +722,9 @@ export default function QuizPage() {
                   <NumberField
                     label="Glucosa en ayunas"
                     value={draft.biomarkers?.fasting_glucose}
-                    onChange={(value) => updateBiomarker("fasting_glucose", value)}
+                    onChange={(value) =>
+                      updateBiomarker("fasting_glucose", value)
+                    }
                     placeholder="Ej: 95"
                   />
 
@@ -726,7 +762,9 @@ export default function QuizPage() {
                   <NumberField
                     label="Triglicéridos"
                     value={draft.biomarkers?.triglycerides}
-                    onChange={(value) => updateBiomarker("triglycerides", value)}
+                    onChange={(value) =>
+                      updateBiomarker("triglycerides", value)
+                    }
                     placeholder="Ej: 145"
                   />
 
@@ -789,19 +827,32 @@ export default function QuizPage() {
                 </div>
               ) : (
                 <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-6">
-                  <p className="text-sm leading-7 text-violet-900">
+                  <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+                    Capa avanzada bloqueada
+                  </div>
+                  <h4 className="mt-2 text-xl font-semibold text-slate-900">
+                    Este bloque vuelve mucho más útil la interpretación
+                  </h4>
+                  <p className="mt-3 text-sm leading-7 text-violet-900">
                     Tu plan actual permite una evaluación útil, pero sin la capa
                     de biomarcadores. Si quieres una interpretación más profunda,
                     más contextual y con mejor lectura metabólica o nutricional,
                     sube a Pro o Premium.
                   </p>
 
-                  <div className="mt-4">
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                     <Link
                       href="/pricing"
                       className="inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
                     >
-                      Ver planes
+                      Desbloquear Pro
+                    </Link>
+
+                    <Link
+                      href="/pricing"
+                      className="inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Comparar planes
                     </Link>
                   </div>
                 </div>
@@ -823,8 +874,14 @@ export default function QuizPage() {
                 </p>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <SummaryItem label="Edad" value={String(draft.assessment.age || "-")} />
-                  <SummaryItem label="Sexo" value={translateSex(draft.assessment.sex)} />
+                  <SummaryItem
+                    label="Edad"
+                    value={String(draft.assessment.age || "-")}
+                  />
+                  <SummaryItem
+                    label="Sexo"
+                    value={translateSex(draft.assessment.sex)}
+                  />
                   <SummaryItem
                     label="Peso / estatura"
                     value={`${draft.assessment.weightKg || "-"} kg · ${
@@ -849,7 +906,9 @@ export default function QuizPage() {
                   />
                   <SummaryItem
                     label="Calidad de sueño"
-                    value={translateFiveLevelLabel(draft.assessment.sleepQuality)}
+                    value={translateFiveLevelLabel(
+                      draft.assessment.sleepQuality
+                    )}
                   />
                   <SummaryItem
                     label="Objetivo"
@@ -862,6 +921,20 @@ export default function QuizPage() {
                     }`}
                   />
                 </div>
+              </div>
+
+              <div className="rounded-3xl border border-violet-200 bg-violet-50 p-6">
+                <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
+                  Lo que viene ahora
+                </div>
+                <h3 className="mt-2 text-2xl font-bold text-slate-900">
+                  Vas a recibir una lectura estructurada de tu perfil
+                </h3>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  El siguiente paso mostrará tu Health Score, una interpretación
+                  general, factores dominantes, prioridades y una lectura mucho
+                  más útil para entender qué conviene mejorar primero.
+                </p>
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">
