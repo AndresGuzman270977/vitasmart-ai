@@ -11,8 +11,19 @@ import {
 } from "../../lib/healthAnalysis/fallbackNarratives";
 import { formatHealthAnalysisResponse } from "../../lib/healthAnalysis/formatHealthAnalysisResponse";
 import { saveHealthAnalysisSnapshot } from "../../lib/healthAnalysis/saveHealthAnalysisSnapshot";
-import type { HealthAnalysisRequest } from "../../lib/healthAnalysis/types";
+import type {
+  HealthAnalysisRequest,
+  HealthAnalysisSummaryBlock,
+} from "../../lib/healthAnalysis/types";
 import { getCurrentUser } from "../../lib/auth";
+import {
+  buildAiNarrativeContext,
+  type AiNarrativeContext,
+} from "../../lib/healthAnalysis/buildAiNarrativeContext";
+import {
+  generateHealthNarrativesWithAI,
+  type GeneratedHealthNarratives,
+} from "../../lib/healthAnalysis/generateHealthNarrativesWithAI";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,7 +64,7 @@ export async function POST(req: NextRequest) {
       secondaryNeeds: engineResult.secondaryNeeds,
     });
 
-    const summaries = buildFallbackResultNarratives({
+    const fallbackSummaries = buildFallbackResultNarratives({
       scores: {
         healthScore: engineResult.healthScore,
         sleepScore: engineResult.subscores.sleepScore,
@@ -72,7 +83,7 @@ export async function POST(req: NextRequest) {
       secondaryNeeds: engineResult.secondaryNeeds,
     });
 
-    const advancedRecommendations =
+    const fallbackAdvancedRecommendations =
       planMeta.advancedAI || planMeta.plan === "premium"
         ? buildFallbackAdvancedRecommendations({
             dominantNeeds: engineResult.dominantNeeds,
@@ -81,6 +92,68 @@ export async function POST(req: NextRequest) {
             mainGoal: assessment.mainGoal,
           })
         : [];
+
+    let finalSummaries: HealthAnalysisSummaryBlock = fallbackSummaries;
+    let finalAdvancedRecommendations = fallbackAdvancedRecommendations;
+    let aiNarrativesApplied = false;
+    let aiNarrativesError: string | null = null;
+
+    const allowAiNarratives =
+      planMeta.plan === "pro" || planMeta.plan === "premium";
+
+    if (allowAiNarratives) {
+      try {
+        const topIngredientNames =
+          recommendationEngine.recommendationOutput.topIngredients
+            ?.map((item) => item.ingredientName?.trim())
+            .filter(Boolean)
+            .slice(0, 6) || [];
+
+        const narrativeContext: AiNarrativeContext = buildAiNarrativeContext({
+          planMeta: {
+            plan: planMeta.plan,
+            requestedAiMode: planMeta.requestedAiMode,
+            appliedAiMode: planMeta.appliedAiMode,
+          },
+          assessment,
+          biomarkers,
+          scores: {
+            healthScore: engineResult.healthScore,
+            sleepScore: engineResult.subscores.sleepScore,
+            stressScore: engineResult.subscores.stressScore,
+            energyScore: engineResult.subscores.energyScore,
+            focusScore: engineResult.subscores.focusScore,
+            metabolicScore: engineResult.subscores.metabolicScore,
+          },
+          confidence: engineResult.confidence,
+          insights: {
+            strengths: engineResult.strengths,
+            mainDrivers: engineResult.mainDrivers,
+            priorityActions: engineResult.priorityActions,
+            riskSignals: engineResult.riskSignals,
+          },
+          userNeeds: {
+            dominantNeeds: engineResult.dominantNeeds,
+            secondaryNeeds: engineResult.secondaryNeeds,
+          },
+          fallbackSummaries,
+          fallbackAdvancedRecommendations,
+          topIngredientNames,
+        });
+
+        const aiNarratives: GeneratedHealthNarratives =
+          await generateHealthNarrativesWithAI(narrativeContext);
+
+        finalSummaries = aiNarratives.summaries;
+        finalAdvancedRecommendations = aiNarratives.advancedRecommendations;
+        aiNarrativesApplied = true;
+      } catch (aiError: any) {
+        aiNarrativesApplied = false;
+        aiNarrativesError =
+          aiError?.message || "No se pudo generar narrativa con IA.";
+        console.error("AI narrative generation error:", aiError);
+      }
+    }
 
     const response = formatHealthAnalysisResponse({
       planMeta,
@@ -93,7 +166,7 @@ export async function POST(req: NextRequest) {
         metabolicScore: engineResult.subscores.metabolicScore,
       },
       confidence: engineResult.confidence,
-      summaries,
+      summaries: finalSummaries,
       insights: {
         strengths: engineResult.strengths,
         mainDrivers: engineResult.mainDrivers,
@@ -104,7 +177,7 @@ export async function POST(req: NextRequest) {
         dominantNeeds: engineResult.dominantNeeds,
         secondaryNeeds: engineResult.secondaryNeeds,
       },
-      advancedRecommendations,
+      advancedRecommendations: finalAdvancedRecommendations,
       rawProductRecommendations:
         recommendationEngine.recommendationOutput.topIngredients,
     });
@@ -114,7 +187,13 @@ export async function POST(req: NextRequest) {
     const snapshotResult = await saveHealthAnalysisSnapshot({
       userId: currentUser?.id || null,
       request: body,
-      response,
+      response: {
+        ...response,
+        meta: {
+          aiNarrativesApplied,
+          aiNarrativesError,
+        },
+      } as any,
     });
 
     return NextResponse.json(
@@ -126,6 +205,10 @@ export async function POST(req: NextRequest) {
           snapshotSaved: snapshotResult.saved,
           assessmentId: snapshotResult.assessmentId ?? null,
           details: snapshotResult.details ?? null,
+        },
+        meta: {
+          aiNarrativesApplied,
+          aiNarrativesError,
         },
       },
       { status: 200 }

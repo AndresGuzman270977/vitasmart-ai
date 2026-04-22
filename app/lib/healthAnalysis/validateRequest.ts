@@ -36,6 +36,13 @@ const ALLOWED_GOALS: MainGoal[] = [
 
 const ALLOWED_PLANS: UserPlan[] = ["free", "pro", "premium"];
 const ALLOWED_AI_MODES: RequestedAiMode[] = ["basic", "advanced"];
+const ALLOWED_SMOKING_STATUS = [
+  "never",
+  "former",
+  "current",
+  "occasional",
+  "unknown",
+] as const;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -50,12 +57,35 @@ function clampOptionalNumber(
   return Math.max(min, Math.min(max, value));
 }
 
+function sanitizeString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const clean = value.trim();
+  return clean || undefined;
+}
+
 function sanitizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => String(item).trim())
     .filter(Boolean)
     .slice(0, 20);
+}
+
+function normalizePlan(value: unknown): UserPlan {
+  return ALLOWED_PLANS.includes(value as UserPlan)
+    ? (value as UserPlan)
+    : "free";
+}
+
+function normalizeRequestedAiMode(
+  value: unknown,
+  plan: UserPlan
+): RequestedAiMode {
+  if (ALLOWED_AI_MODES.includes(value as RequestedAiMode)) {
+    return value as RequestedAiMode;
+  }
+
+  return plan === "pro" || plan === "premium" ? "advanced" : "basic";
 }
 
 export function validateHealthAnalysisRequest(
@@ -71,15 +101,11 @@ export function validateHealthAnalysisRequest(
   const raw = payload as Partial<HealthAnalysisRequest>;
   const fieldErrors: string[] = [];
 
-  const plan: UserPlan = ALLOWED_PLANS.includes(raw.plan as UserPlan)
-    ? (raw.plan as UserPlan)
-    : "free";
-
-  const requestedAiMode: RequestedAiMode = ALLOWED_AI_MODES.includes(
-    raw.requestedAiMode as RequestedAiMode
-  )
-    ? (raw.requestedAiMode as RequestedAiMode)
-    : "basic";
+  const plan: UserPlan = normalizePlan(raw.plan);
+  const requestedAiMode: RequestedAiMode = normalizeRequestedAiMode(
+    raw.requestedAiMode,
+    plan
+  );
 
   if (!raw.assessment || typeof raw.assessment !== "object") {
     return {
@@ -109,14 +135,16 @@ export function validateHealthAnalysisRequest(
     alcoholUse: clampOptionalNumber(a.alcoholUse, 0, 5),
     smokingStatus:
       a.smokingStatus &&
-      ["never", "former", "current", "occasional", "unknown"].includes(
-        a.smokingStatus
-      )
+      ALLOWED_SMOKING_STATUS.includes(a.smokingStatus as any)
         ? a.smokingStatus
         : undefined,
     sunExposure: clampOptionalNumber(a.sunExposure, 1, 5),
     hydrationLevel: clampOptionalNumber(a.hydrationLevel, 1, 5),
-    ultraProcessedFoodLevel: clampOptionalNumber(a.ultraProcessedFoodLevel, 1, 5),
+    ultraProcessedFoodLevel: clampOptionalNumber(
+      a.ultraProcessedFoodLevel,
+      1,
+      5
+    ),
 
     bloodPressureKnown:
       typeof a.bloodPressureKnown === "boolean" ? a.bloodPressureKnown : false,
@@ -149,11 +177,12 @@ export function validateHealthAnalysisRequest(
     fieldErrors.push("blood_pressure_incomplete");
   }
 
-  let biomarkers: BiomarkerInput | undefined = undefined;
+  let biomarkers: BiomarkerInput | undefined;
 
   if (raw.biomarkers && typeof raw.biomarkers === "object") {
     const b = raw.biomarkers as BiomarkerInput;
-    biomarkers = {
+
+    const parsedBiomarkers: BiomarkerInput = {
       fasting_glucose: clampOptionalNumber(b.fasting_glucose, 20, 600),
       hba1c: clampOptionalNumber(b.hba1c, 3, 20),
       total_cholesterol: clampOptionalNumber(b.total_cholesterol, 50, 500),
@@ -167,11 +196,17 @@ export function validateHealthAnalysisRequest(
       creatinine: clampOptionalNumber(b.creatinine, 0.1, 20),
       ast: clampOptionalNumber(b.ast, 1, 2000),
       alt: clampOptionalNumber(b.alt, 1, 2000),
-      lab_date: b.lab_date ? String(b.lab_date) : undefined,
+      lab_date: sanitizeString(b.lab_date),
     };
+
+    const hasAtLeastOneBiomarker = Object.values(parsedBiomarkers).some(
+      (value) => value !== undefined
+    );
+
+    biomarkers = hasAtLeastOneBiomarker ? parsedBiomarkers : undefined;
   }
 
-  if (plan === "free" && biomarkers) {
+  if (plan === "free") {
     biomarkers = undefined;
   }
 
