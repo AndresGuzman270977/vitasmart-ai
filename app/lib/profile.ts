@@ -10,7 +10,6 @@ export type UserProfile = {
   subscription_status?: string | null;
   cancel_at_period_end?: boolean | null;
   created_at?: string;
-  updated_at?: string;
 };
 
 type BasicUser = {
@@ -27,13 +26,25 @@ type UserProfileRow = {
   subscription_status?: string | null;
   cancel_at_period_end?: boolean | null;
   created_at?: string;
-  updated_at?: string;
 };
 
 const DEFAULT_PLAN: PlanType = "free";
 
 const USER_PROFILE_SELECT =
-  "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at, updated_at";
+  "id, email, plan, stripe_customer_id, stripe_subscription_id, subscription_status, cancel_at_period_end, created_at";
+
+function makeFallbackProfile(user: BasicUser): UserProfile {
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    plan: DEFAULT_PLAN,
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    subscription_status: null,
+    cancel_at_period_end: false,
+    created_at: undefined,
+  };
+}
 
 async function getAuthenticatedUser(): Promise<BasicUser | null> {
   try {
@@ -74,7 +85,6 @@ function normalizeProfile(data: UserProfileRow): UserProfile {
     subscription_status: data.subscription_status ?? null,
     cancel_at_period_end: Boolean(data.cancel_at_period_end),
     created_at: data.created_at,
-    updated_at: data.updated_at,
   };
 }
 
@@ -131,20 +141,20 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
     return null;
   }
 
+  const existingProfile = await getUserProfile(user.id);
+
+  if (existingProfile) {
+    return existingProfile;
+  }
+
+  const payload = {
+    id: user.id,
+    email: user.email ?? null,
+    plan: DEFAULT_PLAN,
+    cancel_at_period_end: false,
+  };
+
   try {
-    const existingProfile = await selectProfileByUserId(user.id);
-
-    if (existingProfile) {
-      return normalizeProfile(existingProfile);
-    }
-
-    const payload = {
-      id: user.id,
-      email: user.email ?? null,
-      plan: DEFAULT_PLAN,
-      cancel_at_period_end: false,
-    };
-
     const userProfilesTable = supabase.from("user_profiles") as any;
 
     const { data, error } = await userProfilesTable
@@ -156,11 +166,11 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
 
     if (error) {
       console.error("Error ensuring user profile:", error.message);
-      return null;
+      return makeFallbackProfile(user);
     }
 
     if (!data) {
-      return null;
+      return makeFallbackProfile(user);
     }
 
     return normalizeProfile(data as UserProfileRow);
@@ -169,7 +179,7 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
       "Unexpected error ensuring user profile:",
       error?.message || error
     );
-    return null;
+    return makeFallbackProfile(user);
   }
 }
 
