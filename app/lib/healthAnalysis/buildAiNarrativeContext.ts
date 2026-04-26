@@ -88,6 +88,11 @@ type BuildAiNarrativeContextInput = {
   topIngredientNames: string[];
 };
 
+function cleanArray(value: unknown, max = 12): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean).slice(0, max);
+}
+
 export function buildAiNarrativeContext(
   input: BuildAiNarrativeContextInput
 ): AiNarrativeContext {
@@ -96,16 +101,35 @@ export function buildAiNarrativeContext(
     requestedAiMode: input.planMeta.requestedAiMode,
     appliedAiMode: input.planMeta.appliedAiMode,
 
-    assessment: input.assessment,
+    assessment: {
+      ...input.assessment,
+      baseConditions: cleanArray(input.assessment.baseConditions, 20),
+      currentMedications: cleanArray(input.assessment.currentMedications, 20),
+      currentSupplements: cleanArray(input.assessment.currentSupplements, 20),
+    },
+
     biomarkers: input.biomarkers,
 
     scores: input.scores,
     confidence: input.confidence,
-    insights: input.insights,
-    userNeeds: input.userNeeds,
+
+    insights: {
+      strengths: cleanArray(input.insights.strengths, 12),
+      mainDrivers: cleanArray(input.insights.mainDrivers, 12),
+      priorityActions: cleanArray(input.insights.priorityActions, 12),
+      riskSignals: cleanArray(input.insights.riskSignals, 12),
+    },
+
+    userNeeds: {
+      dominantNeeds: cleanArray(input.userNeeds.dominantNeeds, 8),
+      secondaryNeeds: cleanArray(input.userNeeds.secondaryNeeds, 8),
+    },
 
     fallbackSummaries: input.fallbackSummaries,
-    fallbackAdvancedRecommendations: input.fallbackAdvancedRecommendations,
-    topIngredientNames: input.topIngredientNames,
+    fallbackAdvancedRecommendations: cleanArray(
+      input.fallbackAdvancedRecommendations,
+      8
+    ),
+    topIngredientNames: cleanArray(input.topIngredientNames, 8),
   };
 }

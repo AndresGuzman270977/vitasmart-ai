@@ -37,32 +37,40 @@ function safeStringArray(value: unknown, fallback: string[], max = 8) {
 
 function buildPrompt(context: AiNarrativeContext) {
   return `
-Eres un redactor experto en resultados preventivos de salud y bienestar para una app premium llamada VitaSmart AI.
+Eres un redactor experto en salud preventiva para VitaSmart AI.
 
-Tu trabajo es transformar datos estructurados reales del usuario en una respuesta MUY personalizada, menos repetitiva y más natural que un sistema de plantillas.
+Genera una lectura personalizada en español usando SOLO los datos del contexto.
 
-Objetivos:
-- Redactar con tono humano, clínico-preventivo, elegante y útil.
-- Variar la redacción entre usuarios.
-- Basarte en los datos reales del perfil, scores, drivers, riesgos, needs y contexto.
-- No inventar diagnósticos.
-- No afirmar enfermedades no confirmadas.
-- No sonar alarmista.
-- No repetir literalmente las frases fallback salvo que sea necesario.
-- Si faltan datos, intégralo con naturalidad.
-- Las recomendaciones deben ser accionables, concretas y no redundantes.
+Reglas obligatorias:
+- No diagnostiques.
+- No afirmes enfermedades.
+- No inventes síntomas, biomarcadores ni antecedentes.
+- No uses lenguaje alarmista.
+- No recomiendes suspender medicamentos.
+- No reemplaces consulta médica.
+- No repitas literalmente los textos fallback.
+- No uses markdown.
+- No pongas títulos dentro de los campos.
+- Redacta con tono humano, premium, claro y clínico-preventivo.
+- Si faltan datos, dilo de forma natural y prudente.
+- Las recomendaciones deben ser concretas, accionables y coherentes con scores, drivers, riskSignals y needs.
 
-Devuelve SOLO JSON válido con esta estructura exacta:
+Diferenciación por plan:
+- Pro: más claridad, explicación y priorización.
+- Premium: mayor profundidad, continuidad y personalización.
+- Free normalmente no debería llegar a esta función.
+
+Devuelve exactamente:
 {
   "executiveSummary": "string",
   "clinicalStyleSummary": "string",
   "scoreNarrative": "string",
   "professionalFollowUpAdvice": "string",
-  "advancedRecommendations": ["string", "string", "string", "string"]
+  "advancedRecommendations": ["string"]
 }
 
-Contexto completo del caso:
-${JSON.stringify(context, null, 2)}
+Contexto:
+${JSON.stringify(context)}
 `.trim();
 }
 
@@ -71,30 +79,60 @@ export async function generateHealthNarrativesWithAI(
 ): Promise<GeneratedHealthNarratives> {
   const client = getOpenAIClient();
 
-  const response = await client.chat.completions.create({
+  const response = await client.responses.create({
     model: process.env.OPENAI_HEALTH_MODEL?.trim() || "gpt-4.1-mini",
-    temperature: 0.9,
-    response_format: { type: "json_object" },
-    messages: [
+    temperature: 0.75,
+    input: [
       {
         role: "system",
         content:
-          "Eres un especialista en redacción personalizada de resultados preventivos de salud para una aplicación de wellness.",
+          "Eres un especialista en redacción personalizada de resultados preventivos de salud para una app premium de wellness. Respondes siempre en español claro, prudente y no diagnóstico.",
       },
       {
         role: "user",
         content: buildPrompt(context),
       },
     ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "health_narratives",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            executiveSummary: { type: "string" },
+            clinicalStyleSummary: { type: "string" },
+            scoreNarrative: { type: "string" },
+            professionalFollowUpAdvice: { type: "string" },
+            advancedRecommendations: {
+              type: "array",
+              minItems: 1,
+              maxItems: 8,
+              items: { type: "string" },
+            },
+          },
+          required: [
+            "executiveSummary",
+            "clinicalStyleSummary",
+            "scoreNarrative",
+            "professionalFollowUpAdvice",
+            "advancedRecommendations",
+          ],
+        },
+      },
+    },
   });
 
-  const raw = response.choices?.[0]?.message?.content || "{}";
+  const raw = response.output_text || "{}";
 
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("La IA no devolvió un JSON válido.");
+    throw new Error("La IA no devolvió JSON estructurado válido.");
   }
 
   return {
