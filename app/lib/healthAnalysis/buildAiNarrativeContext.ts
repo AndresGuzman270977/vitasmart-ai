@@ -5,11 +5,17 @@ import type {
   HealthAnalysisSummaryBlock,
   MainGoal,
 } from "./types";
+import {
+  detectUserProfileType,
+  type UserProfileType,
+} from "./detectUserProfileType";
 
 export type AiNarrativeContext = {
   plan: "free" | "pro" | "premium";
   requestedAiMode: "basic" | "advanced";
   appliedAiMode: "basic" | "advanced";
+
+  profileType: UserProfileType;
 
   assessment: {
     age?: number;
@@ -90,16 +96,36 @@ type BuildAiNarrativeContextInput = {
 
 function cleanArray(value: unknown, max = 12): string[] {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item).trim()).filter(Boolean).slice(0, max);
+
+  return value
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+    .slice(0, max);
 }
 
 export function buildAiNarrativeContext(
   input: BuildAiNarrativeContextInput
 ): AiNarrativeContext {
+  const profileType = detectUserProfileType({
+    stressScore: input.scores.stressScore,
+    sleepScore: input.scores.sleepScore,
+    energyScore: input.scores.energyScore,
+    healthScore: input.scores.healthScore,
+    metabolicScore: input.scores.metabolicScore,
+    physicalActivity: input.assessment.physicalActivity,
+    sleepHours: input.assessment.sleepHours,
+    stressLevel: input.assessment.stressLevel,
+    fatigueLevel: input.assessment.fatigueLevel,
+    focusDifficulty: input.assessment.focusDifficulty,
+    ultraProcessedFoodLevel: input.assessment.ultraProcessedFoodLevel,
+  });
+
   return {
     plan: input.planMeta.plan,
     requestedAiMode: input.planMeta.requestedAiMode,
     appliedAiMode: input.planMeta.appliedAiMode,
+
+    profileType,
 
     assessment: {
       ...input.assessment,

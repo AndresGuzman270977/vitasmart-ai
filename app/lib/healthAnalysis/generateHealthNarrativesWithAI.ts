@@ -35,11 +35,45 @@ function safeStringArray(value: unknown, fallback: string[], max = 8) {
   return cleaned.length > 0 ? cleaned : fallback;
 }
 
+function getProfileToneInstruction(profileType: AiNarrativeContext["profileType"]) {
+  if (profileType === "disciplined") {
+    return `
+Tipo de usuario detectado: disciplined.
+Adapta el tono hacia optimización fina, mejora incremental, precisión y continuidad.
+No lo trates como alguien desordenado; enfoca el mensaje en sostener lo bueno y ajustar detalles.
+`.trim();
+  }
+
+  if (profileType === "overloaded") {
+    return `
+Tipo de usuario detectado: overloaded.
+Adapta el tono hacia alivio, simplificación y priorización.
+Evita cargarlo con demasiadas acciones; sugiere pocos movimientos de alto impacto y baja fricción.
+`.trim();
+  }
+
+  if (profileType === "inconsistent") {
+    return `
+Tipo de usuario detectado: inconsistent.
+Adapta el tono hacia estructura, claridad y pasos concretos.
+No lo critiques; orienta el mensaje a crear consistencia, rutinas simples y seguimiento.
+`.trim();
+  }
+
+  return `
+Tipo de usuario detectado: reactive.
+Adapta el tono hacia conciencia, impacto y urgencia prudente sin alarmismo.
+Ayuda al usuario a entender por qué conviene actuar antes de que los patrones se acumulen.
+`.trim();
+}
+
 function buildPrompt(context: AiNarrativeContext) {
   return `
 Eres un redactor experto en salud preventiva para VitaSmart AI.
 
 Genera una lectura personalizada en español usando SOLO los datos del contexto.
+
+${getProfileToneInstruction(context.profileType)}
 
 Reglas obligatorias:
 - No diagnostiques.
@@ -54,6 +88,8 @@ Reglas obligatorias:
 - Redacta con tono humano, premium, claro y clínico-preventivo.
 - Si faltan datos, dilo de forma natural y prudente.
 - Las recomendaciones deben ser concretas, accionables y coherentes con scores, drivers, riskSignals y needs.
+- Evita que todos los usuarios reciban la misma estructura narrativa.
+- Usa el tipo de usuario detectado para cambiar la intención del mensaje, no solo las palabras.
 
 Diferenciación por plan:
 - Pro: más claridad, explicación y priorización.
@@ -81,12 +117,12 @@ export async function generateHealthNarrativesWithAI(
 
   const response = await client.responses.create({
     model: process.env.OPENAI_HEALTH_MODEL?.trim() || "gpt-4.1-mini",
-    temperature: 0.75,
+    temperature: 0.8,
     input: [
       {
         role: "system",
         content:
-          "Eres un especialista en redacción personalizada de resultados preventivos de salud para una app premium de wellness. Respondes siempre en español claro, prudente y no diagnóstico.",
+          "Eres un especialista en redacción personalizada de resultados preventivos de salud para una app premium de wellness. Respondes siempre en español claro, prudente, humano y no diagnóstico.",
       },
       {
         role: "user",
@@ -102,15 +138,30 @@ export async function generateHealthNarrativesWithAI(
           type: "object",
           additionalProperties: false,
           properties: {
-            executiveSummary: { type: "string" },
-            clinicalStyleSummary: { type: "string" },
-            scoreNarrative: { type: "string" },
-            professionalFollowUpAdvice: { type: "string" },
+            executiveSummary: {
+              type: "string",
+              minLength: 80,
+            },
+            clinicalStyleSummary: {
+              type: "string",
+              minLength: 100,
+            },
+            scoreNarrative: {
+              type: "string",
+              minLength: 80,
+            },
+            professionalFollowUpAdvice: {
+              type: "string",
+              minLength: 80,
+            },
             advancedRecommendations: {
               type: "array",
-              minItems: 1,
+              minItems: 3,
               maxItems: 8,
-              items: { type: "string" },
+              items: {
+                type: "string",
+                minLength: 40,
+              },
             },
           },
           required: [
