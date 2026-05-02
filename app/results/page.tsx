@@ -18,7 +18,6 @@ import {
 } from "../lib/planLimits";
 import PremiumGate from "../../components/PremiumGate";
 import UpgradePrompt from "../../components/UpgradePrompt";
-import ResultHero from "../../components/health/ResultHero";
 import ResultSubscoresGrid from "../../components/health/ResultSubscoresGrid";
 import ResultInsightsPanel from "../../components/health/ResultInsightsPanel";
 import FollowUpPanel from "../../components/health/FollowUpPanel";
@@ -953,9 +952,8 @@ function ResultsPageContent() {
           </h1>
 
           <p className="text-slate-600">
-            Este resultado está diseñado para ayudarte a entender mejor tu punto
-            de partida actual y tomar decisiones más conscientes sobre tu
-            bienestar.
+            Este resultado no es solo información. Es una señal clara de dónde
+            estás y qué tanto puedes mejorar si tomas acción con intención.
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1102,16 +1100,78 @@ function ResultsPageContent() {
         {showHealthBlocks && analysis ? (
           <>
             <div className="mt-8">
-              <ResultHero
-                plan={analysis.plan}
-                healthScore={analysis.scores.healthScore}
-                confidenceLevel={analysis.confidence.confidenceLevel}
-                confidenceExplanation={analysis.confidence.confidenceExplanation}
-                executiveSummary={analysis.summaries.executiveSummary}
-                clinicalStyleSummary={analysis.summaries.clinicalStyleSummary}
-                upgradeMessage={analysis.upgradeMessage}
-                advancedAI={analysis.advancedAI}
-              />
+              <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-8 text-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+                      Resultado personalizado
+                    </div>
+                    <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                      {resultTone}
+                    </h2>
+                  </div>
+
+                  <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-slate-100">
+                    {advancedAIEnabled
+                      ? "Análisis completo activo"
+                      : "Vista inicial"}
+                  </div>
+                </div>
+
+                <div className="mt-8 grid gap-8 lg:grid-cols-[auto_1fr] lg:items-end">
+                  <div>
+                    <div className="flex items-end gap-2">
+                      <div className="text-7xl font-bold leading-none">
+                        {analysis.scores.healthScore}
+                      </div>
+                      <div className="pb-2 text-xl text-slate-400">/100</div>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-400">
+                      Health Score orientativo basado en tu perfil actual.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="max-w-3xl text-base leading-8 text-slate-200">
+                      {analysis.summaries.executiveSummary}
+                    </p>
+
+                    {!advancedAIEnabled && potentialScore > 0 && (
+                      <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-5">
+                        <div className="text-sm font-semibold text-slate-300">
+                          Estás viendo solo una parte del análisis real
+                        </div>
+                        <p className="mt-2 text-lg font-semibold text-white">
+                          Tu potencial de mejora podría acercarse a {" "}
+                          <span className="text-violet-200">{potentialScore}+</span>{" "}
+                          con una lectura más profunda y accionable.
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">
+                          La versión completa te muestra qué está afectando más tu
+                          resultado y qué conviene priorizar primero.
+                        </p>
+                      </div>
+                    )}
+
+                    {!advancedAIEnabled && (
+                      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                        <Link
+                          href="/pricing"
+                          className="inline-flex rounded-xl bg-white px-6 py-3 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                        >
+                          Desbloquear análisis completo
+                        </Link>
+                        <Link
+                          href="/pricing"
+                          className="inline-flex rounded-xl border border-white/20 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-white/10"
+                        >
+                          Comparar planes
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="mt-8 grid gap-6 md:grid-cols-3">
@@ -1231,20 +1291,50 @@ function ResultsPageContent() {
                       )}
                     </div>
 
-                    <div className="mt-3 grid gap-3">
-                      {visibleAdvancedRecommendations.map((item, index) => (
-                        <div
-                          key={`${index}-${item}`}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
-                        >
-                          <div className="text-sm font-semibold text-emerald-900">
-                            Recomendación {index + 1}
+                    <div className="relative mt-3">
+                      <div
+                        className={`grid gap-3 ${
+                          !advancedAIEnabled ? "select-none blur-[2px]" : ""
+                        }`}
+                      >
+                        {visibleAdvancedRecommendations.map((item, index) => (
+                          <div
+                            key={`${index}-${item}`}
+                            className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+                          >
+                            <div className="text-sm font-semibold text-emerald-900">
+                              Recomendación {index + 1}
+                            </div>
+                            <p className="mt-1 text-sm text-emerald-800">
+                              {item}
+                            </p>
                           </div>
-                          <p className="mt-1 text-sm text-emerald-800">
-                            {item}
-                          </p>
+                        ))}
+                      </div>
+
+                      {!advancedAIEnabled && (
+                        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-white/70 p-4 backdrop-blur-sm">
+                          <div className="max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl ring-1 ring-slate-200">
+                            <div className="text-sm font-semibold text-slate-500">
+                              Recomendaciones avanzadas ocultas
+                            </div>
+                            <h3 className="mt-2 text-lg font-semibold text-slate-900">
+                              Aquí es donde el análisis se vuelve realmente útil
+                            </h3>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                              Estás viendo solo una vista inicial. La versión Pro
+                              desbloquea priorización real, acciones específicas y
+                              una lectura mucho más accionable.
+                            </p>
+                            <Link
+                              href="/pricing"
+                              className="mt-4 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+                            >
+                              Desbloquear Pro
+                            </Link>
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 )}
@@ -1576,6 +1666,34 @@ function ResultsPageContent() {
                 </>
               )}
             </div>
+
+
+            {!advancedAIEnabled && (
+              <div className="mt-10 rounded-3xl bg-slate-900 p-8 text-center text-white shadow-sm">
+                <h3 className="text-2xl font-bold">
+                  Estás a un paso de ver tu análisis real
+                </h3>
+                <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+                  Lo que viste es solo la superficie. La diferencia real está en
+                  entender qué está afectando tu resultado, qué priorizar y cómo
+                  convertir este score en una ruta concreta de mejora.
+                </p>
+                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                  <Link
+                    href="/pricing"
+                    className="inline-flex rounded-xl bg-white px-6 py-3 text-center font-semibold text-slate-900 transition hover:bg-slate-100"
+                  >
+                    Desbloquear ahora
+                  </Link>
+                  <Link
+                    href="/quiz"
+                    className="inline-flex rounded-xl border border-white/20 px-6 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+                  >
+                    Repetir análisis
+                  </Link>
+                </div>
+              </div>
+            )}
           </>
         ) : null}
       </div>
