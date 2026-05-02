@@ -16,6 +16,7 @@ import {
   normalizePlan,
   type PlanType,
 } from "../lib/planLimits";
+import { trackEvent } from "../lib/analytics";
 import PremiumGate from "../../components/PremiumGate";
 import UpgradePrompt from "../../components/UpgradePrompt";
 import ResultSubscoresGrid from "../../components/health/ResultSubscoresGrid";
@@ -239,6 +240,9 @@ function ResultsPageContent() {
 
   const mountedRef = useRef(true);
   const lastSavedSignatureRef = useRef<string | null>(null);
+  const resultsViewedTrackedRef = useRef<string | null>(null);
+  const upgradeImpressionTrackedRef = useRef<string | null>(null);
+  const advancedUnlockSeenTrackedRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -916,6 +920,134 @@ function ResultsPageContent() {
     };
   }, [plan]);
 
+
+  useEffect(() => {
+    if (planLoading || loadingAnalysis || analysisError || !analysis) return;
+
+    const trackingKey = `${analysis.assessmentVersion}::${analysis.scores.healthScore}::${plan}::${analysis.appliedAiMode}`;
+
+    if (resultsViewedTrackedRef.current === trackingKey) return;
+
+    resultsViewedTrackedRef.current = trackingKey;
+
+    void trackEvent({
+      eventName: "results_viewed",
+      page: "/results",
+      plan,
+      metadata: {
+        healthScore: analysis.scores.healthScore,
+        sleepScore: analysis.scores.sleepScore,
+        stressScore: analysis.scores.stressScore,
+        energyScore: analysis.scores.energyScore,
+        focusScore: analysis.scores.focusScore,
+        metabolicScore: analysis.scores.metabolicScore,
+        requestedAiMode: analysis.requestedAiMode,
+        appliedAiMode: analysis.appliedAiMode,
+        advancedAIEnabled,
+        confidenceLevel: analysis.confidence.confidenceLevel,
+        mainGoal: draft?.assessment?.mainGoal ?? null,
+        hasProductRecommendations:
+          (analysis.productRecommendations?.length ?? 0) > 0,
+      },
+    });
+  }, [
+    advancedAIEnabled,
+    analysis,
+    analysisError,
+    draft?.assessment?.mainGoal,
+    loadingAnalysis,
+    plan,
+    planLoading,
+  ]);
+
+  useEffect(() => {
+    if (
+      planLoading ||
+      loadingAnalysis ||
+      analysisError ||
+      !analysis ||
+      plan === "premium" ||
+      !upgradePitch
+    ) {
+      return;
+    }
+
+    const trackingKey = `${plan}::${analysis.scores.healthScore}::${upgradePitch.cta}`;
+
+    if (upgradeImpressionTrackedRef.current === trackingKey) return;
+
+    upgradeImpressionTrackedRef.current = trackingKey;
+
+    void trackEvent({
+      eventName: "upgrade_impression",
+      page: "/results",
+      plan,
+      metadata: {
+        healthScore: analysis.scores.healthScore,
+        appliedAiMode: analysis.appliedAiMode,
+        advancedAIEnabled,
+        cta: upgradePitch.cta,
+        title: upgradePitch.title,
+        mainGoal: draft?.assessment?.mainGoal ?? null,
+      },
+    });
+  }, [
+    advancedAIEnabled,
+    analysis,
+    analysisError,
+    draft?.assessment?.mainGoal,
+    loadingAnalysis,
+    plan,
+    planLoading,
+    upgradePitch,
+  ]);
+
+  useEffect(() => {
+    if (!showLockedAdvancedPreview || !analysis) return;
+
+    const trackingKey = `${plan}::${analysis.scores.healthScore}::locked-advanced`;
+
+    if (advancedUnlockSeenTrackedRef.current === trackingKey) return;
+
+    advancedUnlockSeenTrackedRef.current = trackingKey;
+
+    void trackEvent({
+      eventName: "advanced_unlock_seen",
+      page: "/results",
+      plan,
+      metadata: {
+        healthScore: analysis.scores.healthScore,
+        appliedAiMode: analysis.appliedAiMode,
+        lockedItems: lockedAdvancedRecommendations.length,
+        mainGoal: draft?.assessment?.mainGoal ?? null,
+      },
+    });
+  }, [
+    analysis,
+    draft?.assessment?.mainGoal,
+    lockedAdvancedRecommendations.length,
+    plan,
+    showLockedAdvancedPreview,
+  ]);
+
+  const trackPricingClick = useCallback(
+    (location: string) => {
+      void trackEvent({
+        eventName: "pricing_clicked_from_results",
+        page: "/results",
+        plan,
+        metadata: {
+          location,
+          healthScore: analysis?.scores.healthScore ?? null,
+          appliedAiMode: analysis?.appliedAiMode ?? null,
+          advancedAIEnabled,
+          mainGoal: draft?.assessment?.mainGoal ?? null,
+        },
+      });
+    },
+    [advancedAIEnabled, analysis, draft?.assessment?.mainGoal, plan]
+  );
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
       <div className="mx-auto max-w-6xl">
@@ -1047,6 +1179,7 @@ function ResultsPageContent() {
 
             <Link
               href="/pricing"
+              onClick={() => trackPricingClick("results")}
               className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Ver planes
@@ -1089,6 +1222,7 @@ function ResultsPageContent() {
 
               <Link
                 href="/pricing"
+                onClick={() => trackPricingClick("results")}
                 className="inline-flex rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Ver planes
@@ -1157,12 +1291,14 @@ function ResultsPageContent() {
                       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                         <Link
                           href="/pricing"
+                          onClick={() => trackPricingClick("results")}
                           className="inline-flex rounded-xl bg-white px-6 py-3 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
                         >
                           Desbloquear análisis completo
                         </Link>
                         <Link
                           href="/pricing"
+                          onClick={() => trackPricingClick("results")}
                           className="inline-flex rounded-xl border border-white/20 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-white/10"
                         >
                           Comparar planes
@@ -1243,6 +1379,7 @@ function ResultsPageContent() {
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                       <Link
                         href="/pricing"
+                        onClick={() => trackPricingClick("results")}
                         className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
                       >
                         {upgradePitch.cta}
@@ -1250,6 +1387,7 @@ function ResultsPageContent() {
 
                       <Link
                         href="/pricing"
+                        onClick={() => trackPricingClick("results")}
                         className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                       >
                         Comparar planes
@@ -1328,6 +1466,7 @@ function ResultsPageContent() {
                             </p>
                             <Link
                               href="/pricing"
+                              onClick={() => trackPricingClick("results")}
                               className="mt-4 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
                             >
                               Desbloquear Pro
@@ -1358,6 +1497,7 @@ function ResultsPageContent() {
 
                       <Link
                         href="/pricing"
+                        onClick={() => trackPricingClick("results")}
                         className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
                       >
                         {upgradePitch.cta}
@@ -1409,6 +1549,7 @@ function ResultsPageContent() {
 
                       <Link
                         href="/pricing"
+                        onClick={() => trackPricingClick("results")}
                         className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
                       >
                         Desbloquear mi análisis completo
@@ -1429,38 +1570,15 @@ function ResultsPageContent() {
               />
             </div>
 
-            {!advancedAIEnabled && (
-              <div className="mt-8 rounded-2xl border border-violet-200 bg-violet-50 p-6">
-                <div className="text-sm font-semibold uppercase tracking-wide text-violet-700">
-                  Antes de seguir
-                </div>
-                <h2 className="mt-2 text-2xl font-bold text-slate-900">
-                  Este resultado puede volverse mucho más útil
-                </h2>
-                <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-700">
-                  Lo que estás viendo ya tiene valor, pero aún es una lectura
-                  parcial. Los planes Pro y Premium desbloquean una capa mucho
-                  más accionable: más profundidad, mejor priorización y una
-                  experiencia claramente más útil para decidir qué hacer después.
-                </p>
-
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                  <Link
-                    href="/pricing"
-                    className="inline-flex rounded-xl bg-slate-900 px-5 py-3 text-center font-semibold text-white transition hover:bg-slate-700"
-                  >
-                    Ver planes
-                  </Link>
-
-                  <Link
-                    href="/pricing"
-                    className="inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-center font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    Comparar Pro vs Premium
-                  </Link>
-                </div>
-              </div>
-            )}
+            <div className="mt-8">
+              <SmartPaywall
+                plan={plan}
+                healthScore={analysis.scores.healthScore}
+                mainGoal={draft?.assessment?.mainGoal}
+                potentialScore={potentialScore}
+                location="results_mid"
+              />
+            </div>
 
             <div className="mt-8">
               <ResultInsightsPanel
@@ -1610,6 +1728,7 @@ function ResultsPageContent() {
 
                         <Link
                           href="/pricing"
+                          onClick={() => trackPricingClick("results")}
                           className="rounded-xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
                         >
                           Acceder al análisis completo
@@ -1668,36 +1787,245 @@ function ResultsPageContent() {
             </div>
 
 
-            {!advancedAIEnabled && (
-              <div className="mt-10 rounded-3xl bg-slate-900 p-8 text-center text-white shadow-sm">
-                <h3 className="text-2xl font-bold">
-                  Estás a un paso de ver tu análisis real
-                </h3>
-                <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-                  Lo que viste es solo la superficie. La diferencia real está en
-                  entender qué está afectando tu resultado, qué priorizar y cómo
-                  convertir este score en una ruta concreta de mejora.
-                </p>
-                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-                  <Link
-                    href="/pricing"
-                    className="inline-flex rounded-xl bg-white px-6 py-3 text-center font-semibold text-slate-900 transition hover:bg-slate-100"
-                  >
-                    Desbloquear ahora
-                  </Link>
-                  <Link
-                    href="/quiz"
-                    className="inline-flex rounded-xl border border-white/20 px-6 py-3 text-center font-semibold text-white transition hover:bg-white/10"
-                  >
-                    Repetir análisis
-                  </Link>
-                </div>
-              </div>
-            )}
+            <div className="mt-10">
+              <SmartPaywall
+                plan={plan}
+                healthScore={analysis.scores.healthScore}
+                mainGoal={draft?.assessment?.mainGoal}
+                potentialScore={potentialScore}
+                location="results_bottom"
+                dark
+              />
+            </div>
           </>
         ) : null}
       </div>
     </main>
+  );
+}
+
+
+function getSmartPaywallCopy(params: {
+  plan: PlanType;
+  healthScore: number;
+  mainGoal?: string;
+  potentialScore?: number;
+}) {
+  const { plan, healthScore, mainGoal, potentialScore } = params;
+
+  if (plan === "pro") {
+    return {
+      eyebrow: "Premium disponible",
+      title: "Lleva tu análisis al nivel más completo",
+      description:
+        "Premium añade mayor profundidad, continuidad y una lectura más refinada para entender tus patrones con más precisión.",
+      cta: "Subir a Premium",
+      secondary: "Comparar planes",
+    };
+  }
+
+  if (healthScore < 60) {
+    return {
+      eyebrow: "Análisis incompleto",
+      title: "Tu resultado merece una lectura más profunda",
+      description:
+        "El score muestra señales que conviene ordenar mejor. Pro desbloquea IA avanzada, priorización real y recomendaciones más accionables.",
+      cta: "Desbloquear Pro",
+      secondary: "Ver qué incluye",
+    };
+  }
+
+  if (mainGoal === "sleep") {
+    return {
+      eyebrow: "Sueño y recuperación",
+      title: "Descubre qué está afectando tu descanso",
+      description:
+        "Pro te ayuda a conectar sueño, estrés, fatiga y hábitos para priorizar mejor tus próximos pasos.",
+      cta: "Ver análisis completo",
+      secondary: "Comparar planes",
+    };
+  }
+
+  if (mainGoal === "energy" || mainGoal === "focus") {
+    return {
+      eyebrow: "Energía y enfoque",
+      title: "Identifica qué está frenando tu rendimiento",
+      description:
+        "Pro desbloquea una lectura más clara sobre los factores que afectan tu energía, concentración y consistencia diaria.",
+      cta: "Desbloquear mi lectura",
+      secondary: "Ver planes",
+    };
+  }
+
+  return {
+    eyebrow: "Potencial de mejora",
+    title: potentialScore
+      ? `Tu score podría acercarse a ${potentialScore}+`
+      : "Tu análisis puede ser mucho más útil",
+    description:
+      "Con Pro desbloqueas IA avanzada, recomendaciones priorizadas y una lectura mucho más personalizada de tu perfil.",
+    cta: "Desbloquear análisis completo",
+    secondary: "Comparar planes",
+  };
+}
+
+function SmartPaywall({
+  plan,
+  healthScore,
+  mainGoal,
+  location,
+  potentialScore,
+  dark = false,
+}: {
+  plan: PlanType;
+  healthScore: number;
+  mainGoal?: string;
+  location: string;
+  potentialScore?: number;
+  dark?: boolean;
+}) {
+  const impressionTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (plan === "premium" || impressionTrackedRef.current) return;
+
+    impressionTrackedRef.current = true;
+
+    void trackEvent({
+      eventName: "smart_paywall_impression",
+      page: "/results",
+      plan,
+      metadata: {
+        location,
+        healthScore,
+        mainGoal: mainGoal ?? null,
+        targetPlan: plan === "pro" ? "premium" : "pro",
+        variant: dark ? "dark" : "light",
+      },
+    });
+  }, [dark, healthScore, location, mainGoal, plan]);
+
+  if (plan === "premium") return null;
+
+  const copy = getSmartPaywallCopy({
+    plan,
+    healthScore,
+    mainGoal,
+    potentialScore,
+  });
+
+  const targetPlan: PlanType = plan === "pro" ? "premium" : "pro";
+  const href = `/pricing?plan=${targetPlan}&source=${location}`;
+
+  const containerClass = dark
+    ? "rounded-3xl bg-slate-900 p-8 text-white shadow-sm"
+    : "rounded-3xl border border-violet-200 bg-violet-50 p-6 shadow-sm";
+
+  const eyebrowClass = dark
+    ? "inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-100 ring-1 ring-white/10"
+    : "inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-200";
+
+  const titleClass = dark
+    ? "mt-4 text-2xl font-bold tracking-tight text-white"
+    : "mt-4 text-2xl font-bold tracking-tight text-slate-900";
+
+  const descriptionClass = dark
+    ? "mt-3 max-w-3xl text-sm leading-7 text-slate-300"
+    : "mt-3 max-w-3xl text-sm leading-7 text-slate-700";
+
+  const cardClass = dark
+    ? "rounded-2xl bg-white/5 p-4 ring-1 ring-white/10"
+    : "rounded-2xl bg-white p-4 ring-1 ring-violet-100";
+
+  const cardTitleClass = dark
+    ? "text-sm font-semibold text-white"
+    : "text-sm font-semibold text-slate-900";
+
+  const cardTextClass = dark
+    ? "mt-1 text-xs leading-5 text-slate-300"
+    : "mt-1 text-xs leading-5 text-slate-600";
+
+  return (
+    <section className={containerClass}>
+      <div className={eyebrowClass}>{copy.eyebrow}</div>
+
+      <h2 className={titleClass}>{copy.title}</h2>
+
+      <p className={descriptionClass}>{copy.description}</p>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className={cardClass}>
+          <div className={cardTitleClass}>IA avanzada</div>
+          <p className={cardTextClass}>
+            Menos plantilla, más lectura real de tu perfil.
+          </p>
+        </div>
+
+        <div className={cardClass}>
+          <div className={cardTitleClass}>Priorización</div>
+          <p className={cardTextClass}>Qué atacar primero y por qué.</p>
+        </div>
+
+        <div className={cardClass}>
+          <div className={cardTitleClass}>Continuidad</div>
+          <p className={cardTextClass}>Más valor al repetir análisis.</p>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <Link
+          href={href}
+          onClick={() =>
+            void trackEvent({
+              eventName: "smart_paywall_clicked",
+              page: "/results",
+              plan,
+              metadata: {
+                location,
+                targetPlan,
+                healthScore,
+                mainGoal: mainGoal ?? null,
+                cta: copy.cta,
+                variant: dark ? "dark" : "light",
+              },
+            })
+          }
+          className={
+            dark
+              ? "inline-flex justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+              : "inline-flex justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+          }
+        >
+          {copy.cta}
+        </Link>
+
+        <Link
+          href="/pricing"
+          onClick={() =>
+            void trackEvent({
+              eventName: "smart_paywall_secondary_clicked",
+              page: "/results",
+              plan,
+              metadata: {
+                location,
+                targetPlan,
+                healthScore,
+                mainGoal: mainGoal ?? null,
+                cta: copy.secondary,
+                variant: dark ? "dark" : "light",
+              },
+            })
+          }
+          className={
+            dark
+              ? "inline-flex justify-center rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              : "inline-flex justify-center rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          }
+        >
+          {copy.secondary}
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -1787,6 +2115,23 @@ function ProductRecommendationPreviewCard({
                   {product.product.buyUrl && product.product.buyUrl !== "#" && (
                     <a
                       href={product.product.buyUrl}
+                      onClick={() =>
+                        void trackEvent({
+                          eventName: "product_clicked",
+                          page: "/results",
+                          metadata: {
+                            productName: product.product.productName,
+                            productSlug: product.product.slug,
+                            brand: product.product.brand,
+                            ingredientName: item.ingredientName,
+                            ingredientSlug: item.ingredientSlug,
+                            budgetTier: product.product.budgetTier,
+                            fitScore: product.fitScore,
+                            qualityScore: product.qualityScore,
+                            valueScore: product.valueScore,
+                          },
+                        })
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-3 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureUserProfile, getCurrentUserProfile } from "../lib/profile";
 import {
   normalizePlan,
   getPlanLabel,
   type PlanType,
 } from "../lib/planLimits";
+import { trackEvent } from "../lib/analytics";
 
 type MainGoal =
   | "energy"
@@ -102,6 +103,7 @@ export default function QuizPage() {
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<QuizDraft>(DEFAULT_DRAFT);
   const [error, setError] = useState("");
+  const quizStartedTrackedRef = useRef(false);
 
   useEffect(() => {
     let ignore = false;
@@ -172,6 +174,22 @@ export default function QuizPage() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (planLoading || quizStartedTrackedRef.current) return;
+
+    quizStartedTrackedRef.current = true;
+
+    trackEvent({
+      eventName: "quiz_started",
+      page: "/quiz",
+      plan,
+      metadata: {
+        initialStep: 1,
+        canUseBiomarkers: plan === "pro" || plan === "premium",
+      },
+    });
+  }, [plan, planLoading]);
 
   const bmi = useMemo(() => {
     const weight = draft.assessment.weightKg;
@@ -299,7 +317,7 @@ export default function QuizPage() {
     setStep((prev) => Math.max(prev - 1, 1));
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const validationError = validateStep(step);
     if (validationError) {
       setError(validationError);
@@ -316,6 +334,27 @@ export default function QuizPage() {
     };
 
     persistDraft(finalDraft);
+
+    await trackEvent({
+      eventName: "quiz_completed",
+      page: "/quiz",
+      plan,
+      metadata: {
+        completedStep: step,
+        progress: 100,
+        mainGoal: finalDraft.assessment.mainGoal ?? null,
+        requestedAiMode: finalDraft.requestedAiMode ?? null,
+        canUseBiomarkers,
+        hasBiomarkers: Boolean(finalDraft.biomarkers?.lab_date),
+        age: finalDraft.assessment.age ?? null,
+        sex: finalDraft.assessment.sex ?? null,
+        stressLevel: finalDraft.assessment.stressLevel ?? null,
+        sleepHours: finalDraft.assessment.sleepHours ?? null,
+        sleepQuality: finalDraft.assessment.sleepQuality ?? null,
+        physicalActivity: finalDraft.assessment.physicalActivity ?? null,
+      },
+    });
+
     window.location.href = "/results";
   }
 
